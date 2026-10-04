@@ -6,7 +6,6 @@
 	import { auth } from '#lib/auth.svelte.js';
 	import { Box } from '#lib/engine/box.js';
 	import { Visitor } from '#lib/engine/state.js';
-	import { VisitConsent } from '#lib/visit-consent.js';
 	import { Cat, I, catLogo } from '#lib/engine/util.js';
 
 	let { data } = $props();
@@ -40,11 +39,6 @@
 		}, () => {});
 	});
 
-	let statisticsKey = $state('');
-	onMount(() => VisitConsent.subscribe(value => {
-		statisticsKey = value.choice === true ? value.key : '';
-	}));
-
 	// Public content refresh does not depend on optional statistics.
 	let refreshed = '';
 	$effect(() => {
@@ -54,14 +48,14 @@
 		mutation('interactions:refreshBox', { boxId: id }).catch(() => {});
 	});
 
-	// No visit is sent before opt-in, and withdrawal stops future visits immediately.
+	// Signed-in people with a box show up in the owner's visitors unless they turned it
+	// off in their page settings; the server checks that. Anonymous visitors send nothing.
 	let counted = '';
 	$effect(() => {
 		const id = box?._id;
-		const key = statisticsKey;
-		if (!id || !key || counted === `${id}/${key}`) return;
-		counted = `${id}/${key}`;
-		mutation('interactions:visit', { boxId: id, visitorKey: key, consent: true }).catch(() => {});
+		if (!id || !auth.signedIn || own || counted === id) return;
+		counted = id;
+		mutation('interactions:visit', { boxId: id }).catch(() => {});
 	});
 
 	onMount(() => {
@@ -105,7 +99,6 @@
 			<div>{@html I.sleepyLoaf(38)}<span>{box.footer || 'That’s the whole box.'}</span></div>
 			<nav class="pf-foot-links" aria-label="Site links">
 				<a href="/privacy">Privacy</a>
-				<button onclick={() => VisitConsent.edit()}>Privacy settings</button>
 				<a href="/terms">Terms</a>
 				<a href="/imprint">Imprint</a>
 				<a href="/">bento.cat</a>

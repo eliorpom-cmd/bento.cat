@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { VisitConsent } from '../src/lib/visit-consent.js';
+import { clearOptInLeftovers } from '../src/lib/visit-consent.js';
 import { Visitor } from '../src/lib/engine/state.js';
 
 const CHOICE = 'bento.cat/visit-consent.v1', KEY = 'bento.cat/statistics-key.v1';
+const OLD_KEY = 'a'.repeat(32);
 let values, local;
 beforeEach(() => {
-  vi.useFakeTimers();
   values = new Map();
   local = {
     getItem: vi.fn(key => values.get(key) ?? null),
@@ -13,74 +13,64 @@ beforeEach(() => {
     removeItem: vi.fn(key => values.delete(key)),
   };
   vi.stubGlobal('localStorage', local);
-  VisitConsent.choice = null; VisitConsent.key = ''; VisitConsent.expiresAt = 0;
 });
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); });
 
-describe('browser consent', () => {
-  it('does not read or create a persistent visitor key before consent', () => {
+describe('browser storage', () => {
+  it('keeps no visitor key between page loads', () => {
     values.set('bento.cat/visitor-key', 'old-automatic-key');
-    values.set(KEY, 'stale-key');
-    Visitor.load(); VisitConsent.load();
+    Visitor.load();
+    const first = Visitor.key;
     Visitor.set('purr', 'mia/purr1', true);
-    expect(Visitor.key).toHaveLength(32);
+    expect(first).toHaveLength(32);
     expect(Visitor.get('purr', 'mia/purr1')).toBe(true);
-    expect(local.getItem.mock.calls).toEqual([[CHOICE]]);
     expect(local.setItem).not.toHaveBeenCalled();
-    expect(values.has(KEY)).toBe(false);
     expect(values.has('bento.cat/visitor-key')).toBe(false);
-    expect(VisitConsent.choice).toBeNull();
+    Visitor.load();
+    expect(Visitor.key).not.toBe(first);
+  });
+});
+
+describe('leftovers from opt-in visit records', () => {
+  it('does nothing in a browser that never opted in', async () => {
+    const forget = vi.fn();
+    await clearOptInLeftovers(forget);
+    expect(forget).not.toHaveBeenCalled();
+    expect(local.setItem).not.toHaveBeenCalled();
+    expect(local.removeItem).not.toHaveBeenCalled();
   });
 
-  it('declining stores only the choice and keeps interactions available', () => {
-    Visitor.load(); VisitConsent.load(); VisitConsent.choose(false);
+  it('erases visits under an old key, then forgets the key and the choice', async () => {
+    values.set(CHOICE, JSON.stringify({ allowed: true, expiresAt: Date.now() + 1000 }));
+    values.set(KEY, OLD_KEY);
+    const forget = vi.fn(async () => {});
+    await clearOptInLeftovers(forget);
+    expect(forget).toHaveBeenCalledWith(OLD_KEY);
     expect(values.has(KEY)).toBe(false);
-    expect(JSON.parse(values.get(CHOICE)).allowed).toBe(false);
-    expect(Visitor.key).toHaveLength(32);
-    expect(VisitConsent.key).toBe('');
+    expect(values.has(CHOICE)).toBe(false);
   });
 
-  it('only explicit acceptance persists a separate statistics key, and withdrawal removes it', () => {
-    Visitor.load(); VisitConsent.load(); VisitConsent.choose(true);
-    const key = VisitConsent.key;
-    expect(key).toHaveLength(32);
-    expect(key).not.toBe(Visitor.key);
-    expect(values.get(KEY)).toBe(key);
-    VisitConsent.load();
-    expect(VisitConsent.key).toBe(key);
-    expect(VisitConsent.choose(false)).toBe(key);
-    expect(values.has(KEY)).toBe(false);
-    expect(VisitConsent.key).toBe('');
+  it('keeps the key for another try when the erase fails', async () => {
+    values.set(CHOICE, JSON.stringify({ allowed: true, expiresAt: Date.now() + 1000 }));
+    values.set(KEY, OLD_KEY);
+    await clearOptInLeftovers(async () => { throw new Error('offline'); });
+    expect(values.get(KEY)).toBe(OLD_KEY);
   });
 
-  it('expired or malformed choices never grant consent', () => {
-    for (const saved of ['bad json', JSON.stringify({ allowed: 'true', expiresAt: Date.now() + 1000 }), JSON.stringify({ allowed: true, expiresAt: Date.now() - 1 })]) {
-      values.set(CHOICE, saved); values.set(KEY, 'a'.repeat(32));
-      VisitConsent.load();
-      expect(VisitConsent.choice).toBeNull();
-      expect(VisitConsent.key).toBe('');
-      expect(values.has(KEY)).toBe(false);
-    }
+  it('drops a declined choice or a malformed key without calling the server', async () => {
+    values.set(CHOICE, JSON.stringify({ allowed: false, expiresAt: Date.now() + 1000 }));
+    values.set(KEY, 'not-a-key');
+    const forget = vi.fn();
+    await clearOptInLeftovers(forget);
+    expect(forget).not.toHaveBeenCalled();
+    expect(values.size).toBe(0);
   });
 
-  it('expires consent in an already open tab and notifies subscribers', () => {
-    VisitConsent.choose(true);
-    const fn = vi.fn(), stop = VisitConsent.subscribe(fn);
-    vi.advanceTimersByTime(180 * 24 * 60 * 60 * 1000);
-    VisitConsent.checkExpiry();
-    expect(VisitConsent.choice).toBeNull();
-    expect(VisitConsent.key).toBe('');
-    expect(values.has(KEY)).toBe(false);
-    expect(fn).toHaveBeenCalledTimes(2);
-    stop();
-  });
-
-  it('blocked browser storage leaves all choices and interactions usable in memory', () => {
-    for (const fn of Object.values(local)) fn.mockImplementation(() => { throw new Error('Storage blocked'); });
-    expect(() => { Visitor.load(); VisitConsent.load(); VisitConsent.choose(true); Visitor.set('sub', 'mia/list', true); }).not.toThrow();
-    expect(VisitConsent.key).toHaveLength(32);
-    expect(Visitor.get('sub', 'mia/list')).toBe(true);
-    expect(() => VisitConsent.choose(false)).not.toThrow();
-    expect(VisitConsent.key).toBe('');
+  it('works when browser storage is blocked', async () => {
+    vi.stubGlobal('localStorage', { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); } });
+    await expect(clearOptInLeftovers(vi.fn())).resolves.toBeUndefined();
+    Visitor.load();
+    Visitor.set('purr', 'mia/purr1', true);
+    expect(Visitor.get('purr', 'mia/purr1')).toBe(true);
   });
 });

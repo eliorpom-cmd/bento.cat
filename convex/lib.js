@@ -116,6 +116,10 @@ export function cleanProfile(data) {
     if (typeof data.showInExplore !== 'boolean') throw new ConvexError('Choose whether to show your box in Explore.');
     out.showInExplore = data.showInExplore;
   }
+  if ('shareVisits' in data) {
+    if (typeof data.shareVisits !== 'boolean') throw new ConvexError('Choose whether boxes you visit can see you.');
+    out.shareVisits = data.shareVisits;
+  }
   if ('suggestions' in data) out.suggestions = Array.isArray(data.suggestions) ? data.suggestions.slice(0, 10).map(s => cleanValue(s)) : [];
   if ('tiles' in data) out.tiles = cleanTiles(data.tiles);
   if ('mobile' in data) out.mobile = Array.isArray(data.mobile) ? data.mobile.filter(id => typeof id === 'string').slice(0, 150).map(id => id.slice(0, 40)) : [];
