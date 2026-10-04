@@ -41,6 +41,26 @@ describe('profile saves', () => {
   });
 });
 
+describe('unfinished tiles', () => {
+  it('keeps empty tiles in the editor but leaves them out of the public box', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    const tiles = [
+      { id: 'draft', type: 'link', draft: true, title: '', url: '' },
+      { id: 'nourl', type: 'music', title: 'Song', url: ' ' },
+      { id: 'nomap', type: 'map', place: '', caption: 'Somewhere' },
+      { id: 'nonote', type: 'note', html: '<br>&nbsp;' },
+      { id: 'nosec', type: 'section', text: '' },
+      { id: 'link', type: 'link', title: 'Site', url: 'https://example.com' },
+      { id: 'map', type: 'map', place: '', lat: 46.2, lon: 6.1 },
+      { id: 'note', type: 'note', html: '<b>Hi</b>' },
+      { id: 'purr', type: 'purr', count: 0 },
+    ];
+    await save(a, { tiles });
+    expect((await a.query(api.boxes.mine)).tiles.map(x => x.id)).toEqual(tiles.map(x => x.id));
+    expect((await t.query(api.boxes.get, { handle: 'owner' })).tiles.map(x => x.id)).toEqual(['link', 'map', 'note', 'purr']);
+  });
+});
+
 describe('Explore visibility', () => {
   const tiles = [{ id: 'note', type: 'text', text: 'Hello' }];
 
