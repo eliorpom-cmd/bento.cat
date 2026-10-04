@@ -99,6 +99,18 @@ describe('Explore visibility', () => {
   });
 });
 
+describe('purr counts', () => {
+  it('starts a new purr tile at zero whatever count the editor sends', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    await save(a, { tiles: [{ id: 'paw', type: 'purr', count: 9999 }] });
+    expect((await t.query(api.boxes.get, { handle: 'owner' })).tiles[0].count).toBe(0);
+    const { _id: boxId } = await a.query(api.boxes.mine);
+    await expect(t.mutation(api.interactions.purr, { boxId, tileId: 'paw', visitorKey: 'visitor-key-1' })).resolves.toMatchObject({ count: 1 });
+    await save(a, { tiles: [{ id: 'paw', type: 'purr', count: 5000 }] }, 1);
+    expect((await t.query(api.boxes.get, { handle: 'owner' })).tiles[0].count).toBe(1);
+  });
+});
+
 describe('media storage', () => {
   it('rejects oversized and active content before reserving storage', async () => {
     const t = convexTest(schema, modules), a = await owner(t);

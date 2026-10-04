@@ -142,10 +142,11 @@ export const save = mutation({
     await syncReferences(ctx, user._id, { ...box, ...patch });
     await ctx.db.patch(box._id, { ...patch, revision, lastSaveId: saveId, updatedAt });
     // Seed counters for new purr tiles so visitor purrs have something to add to.
+    // They start at zero: only visitors' purrs count, never a number the editor sends.
     for (const t of patch.tiles ?? []) {
       if (t.type !== 'purr') continue;
       const c = await ctx.db.query('counters').withIndex('by_box_tile', q => q.eq('boxId', box._id).eq('tileId', t.id)).unique();
-      if (!c) await ctx.db.insert('counters', { boxId: box._id, tileId: t.id, count: Number(t.count) || 0 });
+      if (!c) await ctx.db.insert('counters', { boxId: box._id, tileId: t.id, count: 0 });
     }
     return { revision, updatedAt };
   },
