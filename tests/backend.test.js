@@ -232,6 +232,21 @@ describe('moderation and retention', () => {
     await a.mutation(api.moderation.removeScribble, { id });
     expect(await t.run(ctx => ctx.db.get(id))).toBeNull();
   });
+  it('never hands visitor keys to the owner', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    const box = await a.query(api.boxes.mine);
+    await t.run(async ctx => {
+      await ctx.db.insert('scribbles', { boxId: box._id, tileId: 'book', d: 'M1 1 L2 2', name: 'Visitor', visitorKey: 'visitor-key-1' });
+      await ctx.db.insert('subscribers', { boxId: box._id, tileId: 'list', email: 'cat@example.com', visitorKey: 'visitor-key-1' });
+    });
+    const opts = { paginationOpts: { numItems: 10, cursor: null } };
+    const [scribble] = (await a.query(api.moderation.scribbles, opts)).page;
+    const [subscriber] = (await a.query(api.moderation.subscribers, opts)).page;
+    expect(scribble).toMatchObject({ name: 'Visitor', d: 'M1 1 L2 2' });
+    expect(subscriber).toMatchObject({ email: 'cat@example.com' });
+    expect(scribble).not.toHaveProperty('visitorKey');
+    expect(subscriber).not.toHaveProperty('visitorKey');
+  });
   it('removes only the matching browser’s subscription', async () => {
     const t = convexTest(schema, modules), a = await owner(t), box = await a.query(api.boxes.mine);
     await t.run(async ctx => {
