@@ -497,13 +497,27 @@ export const Acts = {
     specks(el, btn);
     Sound.purr();
     if (Visitor.get('purr', key)) return;
-    Visitor.set('purr', key, true);
+    Visitor.set('purr', key, true, { persist: false });
+    const before = t.count;
     t.count++;
     // Count it here straight away; Convex has the final word on the number.
     if (root._box._id) {
       mutation('interactions:purr', { boxId: root._box._id, tileId: t.id, visitorKey: Visitor.key })
-        .then(r => { if (r?.count != null && el.isConnected) odoSet(el.querySelector('.odo'), r.count); })
-        .catch(() => {});
+        .then(r => {
+          Visitor.set('purr', key, true);
+          if (r?.count != null && el.isConnected) odoSet(el.querySelector('.odo'), r.count);
+        })
+        .catch(() => {
+          Visitor.set('purr', key, false, { persist: false });
+          t.count = before;
+          if (!el.isConnected || Visitor.get('purr', key)) return;
+          el.classList.remove('purred');
+          btn.classList.remove('on');
+          btn.innerHTML = I.paw('#C2566B', 20);
+          odoSet(el.querySelector('.odo'), before);
+          el.querySelector('.purr-sub').textContent = 'purrs. Tap to leave yours.';
+          toast('Your purr couldn’t be saved. Try again.');
+        });
     }
     el.classList.add('purred');
     btn.classList.add('on');
