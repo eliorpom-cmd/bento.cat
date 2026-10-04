@@ -209,9 +209,9 @@ export function EditorView(app, box, opts = {}) {
     showInExplore: box.showInExplore !== false,
   }));
 
-  function save() {
+  function save(o) {
     clearTimeout(S.idleT);
-    saves.changed();
+    saves.changed(o);
   }
 
   const flush = () => saves.flush();
@@ -807,7 +807,7 @@ export function EditorView(app, box, opts = {}) {
     if (!obj) return;
     obj[field] = field === 'html' ? applyMarks(sanitize(f.innerHTML)) : f.textContent.replace(/\s+/g, ' ').trim();
     if (obj.type === 'note') obj.updatedAt = Date.now();
-    save();
+    save({ typing: true });
   });
 
   canvas.addEventListener('focusout', e => {
