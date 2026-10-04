@@ -87,7 +87,8 @@ export default defineSchema({
     boxId: v.id('boxes'),
     tileId: v.string(),
     visitorKey: v.string(),
-  }).index('by_box_visitor', ['boxId', 'visitorKey', 'tileId']),
+  }).index('by_box_visitor', ['boxId', 'visitorKey', 'tileId'])
+    .index('by_box_tile', ['boxId', 'tileId']),
 
   scribbles: defineTable({
     boxId: v.id('boxes'),

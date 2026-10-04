@@ -71,7 +71,7 @@
 		<li>Your account and box: until you delete your box.</li>
 		<li>Anonymous page-view totals: until the box is deleted. Existing totals also include visits counted under the earlier opt-in system.</li>
 		<li>Hourly page-view counts and visits by people with a box: 30 days, removed by an hourly cleanup job. Turning off “Show my box when I visit” deletes your box’s visits straight away. When a browser erases its old statistics key, we keep that key for 30 days as a marker that rejects late requests from other tabs.</li>
-		<li>Purrs, scribbles and list sign-ups on a box: until the box is deleted. Write to us if you want yours removed sooner.</li>
+		<li>Purrs, scribbles and list sign-ups on a box: until the owner removes that tile (a day later, so an accidental removal can be undone) or deletes the box. Write to us if you want yours removed sooner.</li>
 		<li>Removed or unused uploaded files: 24 hours, so you can undo an edit. Deleting your box queues deletion of its uploaded files without that waiting period.</li>
 		<li>Server logs at our providers: usually a few days to a few weeks.</li>
 	</ul>

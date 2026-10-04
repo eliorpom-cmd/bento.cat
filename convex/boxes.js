@@ -5,6 +5,7 @@ import {
   NEW_SUGGESTIONS, boxByHandle, boxOfUser, cleanProfile, currentUser, handleState, isBlank, requireOwnBox, requireUser,
 } from './lib';
 import { syncReferences } from './files';
+import { UNUSED_FILE_TTL } from './mediaPolicy';
 import { eraseUser } from './accounts';
 
 // Everything a page needs to draw a box, with live counts and what this visitor already did.
@@ -145,6 +146,12 @@ export const save = mutation({
     // Turning off visit sharing also takes this box out of everyone's past visitors.
     if (patch.shareVisits === false && box.shareVisits !== false)
       await ctx.scheduler.runAfter(0, internal.accounts.purgeViewerVisits, { boxId: box._id });
+    // What visitors left on a removed tile goes too, after the same grace as media so Undo can bring it back.
+    if (patch.tiles) {
+      const kept = new Set(patch.tiles.map(t => t.id));
+      const tileIds = box.tiles.filter(t => TILE_ROWS.some(([, , types]) => types.includes(t.type)) && !kept.has(t.id)).map(t => t.id);
+      if (tileIds.length) await ctx.scheduler.runAfter(UNUSED_FILE_TTL, internal.boxes.purgeTiles, { boxId: box._id, tileIds });
+    }
     // Seed counters for new purr tiles so visitor purrs have something to add to.
     // They start at zero: only visitors' purrs count, never a number the editor sends.
     for (const t of patch.tiles ?? []) {
@@ -224,6 +231,33 @@ const PURGE = [
   ['views', 'by_box'],
   ['viewHours', 'by_box_hour'],
 ];
+
+// Rows visitors leave on a tile, by the tile types that collect them.
+const TILE_ROWS = [
+  ['counters', 'by_box_tile', ['purr']],
+  ['purrs', 'by_box_tile', ['purr']],
+  ['scribbles', 'by_box_tile', ['guestbook']],
+  ['subscribers', 'by_box_tile_email', ['subscribe']],
+];
+
+// Clears what visitors left on tiles that are still gone, a batch at a time.
+export const purgeTiles = internalMutation({
+  args: { boxId: v.id('boxes'), tileIds: v.array(v.string()) },
+  handler: async (ctx, { boxId, tileIds }) => {
+    const box = await ctx.db.get(boxId);
+    if (!box) return;
+    const gone = tileIds.filter(id => !box.tiles.some(t => t.id === id));
+    let left = false;
+    for (const tileId of gone) {
+      for (const [table, index] of TILE_ROWS) {
+        const rows = await ctx.db.query(table).withIndex(index, q => q.eq('boxId', boxId).eq('tileId', tileId)).take(400);
+        for (const r of rows) await ctx.db.delete(r._id);
+        if (rows.length === 400) left = true;
+      }
+    }
+    if (left) await ctx.scheduler.runAfter(0, internal.boxes.purgeTiles, { boxId, tileIds: gone });
+  },
+});
 
 // Clears related rows a batch at a time, then calls itself until nothing is left.
 export const purge = internalMutation({

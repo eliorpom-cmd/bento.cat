@@ -122,6 +122,31 @@ describe('purr counts', () => {
   });
 });
 
+describe('removed tiles', () => {
+  it('clears what visitors left on a removed tile after the grace period, unless it came back', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    const tiles = [{ id: 'list', type: 'subscribe', title: 'News' }, { id: 'book', type: 'guestbook' }, { id: 'paw', type: 'purr', count: 0 }];
+    await save(a, { tiles });
+    const { _id: boxId } = await a.query(api.boxes.mine);
+    await t.mutation(api.interactions.subscribe, { boxId, tileId: 'list', email: 'cat@example.com', visitorKey: 'visitor-key-1' });
+    await t.mutation(api.interactions.scribble, { boxId, tileId: 'book', d: 'M1 1 L2 2', name: 'Cat', visitorKey: 'visitor-key-1' });
+    await t.mutation(api.interactions.purr, { boxId, tileId: 'paw', visitorKey: 'visitor-key-1' });
+    const rows = () => t.run(async ctx => Promise.all(['subscribers', 'scribbles', 'purrs', 'counters'].map(async n => (await ctx.db.query(n).collect()).length)));
+    expect(await rows()).toEqual([1, 1, 1, 1]);
+    // Removed then restored within the grace period: nothing is lost.
+    await save(a, { tiles: [] }, 1);
+    await save(a, { tiles }, 2);
+    vi.advanceTimersByTime(UNUSED_FILE_TTL);
+    await t.finishInProgressScheduledFunctions();
+    expect(await rows()).toEqual([1, 1, 1, 1]);
+    // Removed for good: the email, the drawing and the purrs go.
+    await save(a, { tiles: [] }, 3);
+    vi.advanceTimersByTime(UNUSED_FILE_TTL);
+    await t.finishInProgressScheduledFunctions();
+    expect(await rows()).toEqual([0, 0, 0, 0]);
+  });
+});
+
 describe('media storage', () => {
   it('rejects oversized and active content before reserving storage', async () => {
     const t = convexTest(schema, modules), a = await owner(t);
