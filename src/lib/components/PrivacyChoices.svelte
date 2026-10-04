@@ -25,7 +25,7 @@
 		notice = '';
 		if (key) {
 			try { await mutation('interactions:forgetVisits', { visitorKey: key }); }
-			catch { notice = 'Statistics are off. Previous visits could not be removed right now. Contact hello@bento.cat for help.'; }
+			catch { notice = 'Individual visit records are off. Previous visits could not be removed right now. Contact hello@bento.cat for help.'; }
 		}
 	}
 </script>
@@ -33,13 +33,13 @@
 {#if ready}
 	{#if choice === null || editing}
 		<section class="privacy-choices" aria-labelledby="privacy-choice-title">
-			<h2 id="privacy-choice-title">Count your visit?</h2>
-			<p>With your permission, a random browser key counts visits for box owners. If you’re signed in, they can also see your box among their visitors. Records are kept for 30 days.</p>
+			<h2 id="privacy-choice-title">Share your visit?</h2>
+			<p>Page views are counted without identifying you. With your permission, we also save your visit under a random browser key for 30 days. If you’re signed in, the owner can see your box among their visitors.</p>
 			<p class="privacy-note">Purrs, scribbles and sign-ups work either way. Change it any time under Privacy settings.</p>
 			<a href="/privacy">Read our privacy policy</a>
 			<div class="privacy-actions">
 				<button class="btn btn-line" onclick={() => choose(false)}>No thanks</button>
-				<button class="btn btn-line" onclick={() => choose(true)}>Allow statistics</button>
+				<button class="btn btn-line" onclick={() => choose(true)}>Share my visit</button>
 			</div>
 		</section>
 	{/if}

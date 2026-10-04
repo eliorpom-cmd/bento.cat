@@ -6,9 +6,9 @@
 <LegalPage title="Privacy" lede="What bento.cat keeps about you, why, and what you can do about it.">
 	<h2>The short version</h2>
 	<ul>
-		<li>No ads or tracking pixels. Box visit statistics are optional and off until you agree. We don’t sell or rent anything about you.</li>
+		<li>No ads or tracking pixels. We count page views without identifying visitors. Individual visit records are optional and off until you agree. We don’t sell or rent anything about you.</li>
 		<li>If you have a box, we keep what you put in it and the email you sign in with.</li>
-		<li>If you allow visit statistics, we count visits under a random browser key. If you’re signed in, the owner can also see your public box among their visitors.</li>
+		<li>If you allow individual visit records, we save visits under a random browser key. If you’re signed in, the owner can also see your public box among their visitors.</li>
 		<li>You can download everything in your box, or delete it, from the editor at any time.</li>
 	</ul>
 
@@ -21,8 +21,8 @@
 
 	<h3>What your browser stores</h3>
 	<ul>
-		<li><b>Your privacy choice</b> in local storage for up to 180 days, so we remember whether you allow visit statistics.</li>
-		<li><b>An optional statistics key</b> in local storage, created only after you allow statistics. It stops a visit being counted twice within half an hour. It is separate from the temporary key used for interactions and is removed when you withdraw consent or your choice expires.</li>
+		<li><b>Your privacy choice</b> in local storage for up to 180 days, so we remember whether you allow individual visit records.</li>
+		<li><b>An optional statistics key</b> in local storage, created only after you allow individual visit records. It stops an individual visit being recorded twice within half an hour. It is separate from the temporary key used for interactions and is removed when you withdraw consent or your choice expires.</li>
 		<li><b>A temporary interaction key and reactions</b> in this tab’s memory, so purrs and sign-ups work without statistics consent. They disappear when the page reloads; we don’t save them in browser storage.</li>
 		<li><b>Sign-in cookies</b> set by Clerk, which keep you signed in.</li>
 	</ul>
@@ -30,12 +30,13 @@
 
 	<h2>When you visit someone’s box</h2>
 	<ul>
-		<li><b>Visits, only with consent.</b> We record the time and your statistics key, at most once every half hour per box. The owner sees visits over the last 30 days. If you’re signed in and have a box of your own, the owner can also see your box’s name, address and picture among the people who came by. Without consent, we don’t record your visit.</li>
+		<li><b>Anonymous page views.</b> Our server adds one to a box’s total when its page loads. Only the box and its running total are stored; no visitor key, account, IP address or individual view time is stored with the count. This uses no browser storage and requires no opt-in. Repeat loads, the owner’s own views and automated requests may count too, so this is not a count of unique people. Totals help rank boxes on Explore and are shown to the owner.</li>
+		<li><b>Individual visits, only with consent.</b> We record the time and your statistics key, at most once every half hour per box. The owner sees visits over the last 30 days. If you’re signed in and have a box of your own, the owner can also see your box’s name, address and picture among the people who came by. Without consent, we add only to the anonymous page-view total.</li>
 		<li><b>Purrs.</b> We store your visitor key against the tile, so each visitor purrs once.</li>
 		<li><b>Guestbook scribbles.</b> We store your drawing, the name you give and your visitor key. Scribbles are shown to everyone who visits the box.</li>
 		<li><b>Joining a list.</b> If you leave your email on a box’s “subscribe” tile, we store it with your visitor key and show it only to that box’s owner, who can download it. The owner decides what to send you; ask them, or us, to take you off.</li>
 	</ul>
-	<p>Legal basis: your consent for visits (Art. 6 (1) (a) GDPR), and providing the interaction features you choose to use (Art. 6 (1) (b) GDPR).</p>
+	<p>Anonymous totals do not identify visitors. The request needed to serve the page is processed under our legitimate interest in running and understanding the use of the service (Art. 6 (1) (f) GDPR). Legal basis for individual visits: your consent (Art. 6 (1) (a) GDPR). For interactions: providing the features you choose to use (Art. 6 (1) (b) GDPR).</p>
 
 	<h3>Maps and music on a box</h3>
 	<ul>
@@ -70,7 +71,8 @@
 	<h2>How long we keep things</h2>
 	<ul>
 		<li>Your account and box: until you delete your box.</li>
-		<li>Individual visit records: 30 days, with expired records removed by an hourly cleanup job. After withdrawal, we retain the old key as a blocking marker for 30 days to reject delayed requests from other tabs. Counts without visitor identifiers may remain for the Explore ranking.</li>
+		<li>Anonymous page-view totals: until the box is deleted. Existing totals also include visits counted under the earlier opt-in system.</li>
+		<li>Individual visit records: 30 days, with expired records removed by an hourly cleanup job. After withdrawal, we retain the old key as a blocking marker for 30 days to reject delayed requests from other tabs. Withdrawing consent does not remove anonymous totals.</li>
 		<li>Purrs, scribbles and list sign-ups on a box: until the box is deleted. Write to us if you want yours removed sooner.</li>
 		<li>Removed or unused uploaded files: 24 hours, so you can undo an edit. Deleting your box queues deletion of its uploaded files without that waiting period.</li>
 		<li>Server logs at our providers: usually a few days to a few weeks.</li>

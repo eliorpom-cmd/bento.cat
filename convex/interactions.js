@@ -10,6 +10,18 @@ const MIN = 60 * 1000;
 
 const VISIT_GAP = 30 * 60 * 1000;
 
+// Page requests count without a visitor key, identity lookup or individual row.
+export const pageView = mutation({
+  args: { boxId: v.id('boxes') },
+  handler: async (ctx, { boxId }) => {
+    if (!(await ctx.db.get(boxId))) return;
+    await limit(ctx, `view:${boxId}`, 1000, 10 * MIN);
+    const views = await ctx.db.query('views').withIndex('by_box', q => q.eq('boxId', boxId)).unique();
+    if (views) await ctx.db.patch(views._id, { count: views.count + 1 });
+    else await ctx.db.insert('views', { boxId, count: 1 });
+  },
+});
+
 async function tileOf(ctx, boxId, tileId, type) {
   const box = await ctx.db.get(boxId);
   const tile = box?.tiles.find(t => t.id === tileId && t.type === type);
@@ -97,9 +109,6 @@ export const visit = mutation({
     await limit(ctx, `visit:${boxId}`, 1000, 10 * MIN);
     const viewerBox = user ? await boxOfUser(ctx, user._id) : null;
     await ctx.db.insert('visits', { boxId, visitorKey, viewerBoxId: viewerBox?._id, at: now });
-    const views = await ctx.db.query('views').withIndex('by_box', q => q.eq('boxId', boxId)).unique();
-    if (views) await ctx.db.patch(views._id, { count: views.count + 1 });
-    else await ctx.db.insert('views', { boxId, count: 1 });
   },
 });
 

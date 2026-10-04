@@ -1437,10 +1437,10 @@ export function EditorView(app, box, opts = {}) {
     try { data = await query('stats:visits'); } catch { data = null; }
     const drawer = wrap.querySelector('.drawer');
     const times = data?.times || [];
-    const head = drawer.querySelector('.dr-head').outerHTML;
+    const head = drawer.querySelector('.dr-head').outerHTML + (data ? `<section class="sniff"><div class="sniff-top"><span class="big tnum">${(data.pageViews ?? 0).toLocaleString('en-GB')}</span><span>total page views</span></div><p class="t-meta">Counted without identifying visitors. Repeat loads and your own views count too.</p></section>` : '');
 
     if (!times.length) {
-      drawer.innerHTML = head + `<section class="dr-empty">${catLogo(64, { live: true })}<b>No visits recorded yet.</b><span>Only visitors who allow statistics are counted. Share your box in a bio, a signature or a group chat.</span><button class="btn btn-dark" data-v="share">Share your box</button></section>`;
+      drawer.innerHTML = head + `<section class="dr-empty">${catLogo(64, { live: true })}<b>No individual visits recorded yet.</b><span>Visit times and visitor profiles appear only when visitors opt in. Share your box in a bio, a signature or a group chat.</span><button class="btn btn-dark" data-v="share">Share your box</button></section>`;
       return;
     }
 
@@ -1482,7 +1482,7 @@ export function EditorView(app, box, opts = {}) {
         <div class="heat-x"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
         <p class="t-meta">The honey square is this hour. Post new things just before the dark ones.</p>
       </section>
-      <section class="month t-meta tnum">bento.cat/${esc(box.handle)} had ${times.length.toLocaleString('en-GB')} recorded ${times.length === 1 ? 'visit' : 'visits'} in the last 30 days. Only visitors who allow statistics are counted.</section>`;
+      <section class="month t-meta tnum">bento.cat/${esc(box.handle)} had ${times.length.toLocaleString('en-GB')} individual ${times.length === 1 ? 'visit' : 'visits'} recorded in the last 30 days. Visit times and visitor profiles include only visitors who opt in.</section>`;
     Cat.flash('wide', 1800);
   }
 

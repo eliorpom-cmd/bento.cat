@@ -178,7 +178,7 @@ export const explore = query({
   },
 });
 
-// One-off: builds `views` from the visits recorded before it existed. Safe to run twice.
+// Seed missing totals from older visits without overwriting anonymous page views.
 export const backfillViews = internalMutation({
   args: {},
   handler: async ctx => {
@@ -186,8 +186,7 @@ export const backfillViews = internalMutation({
     for await (const r of ctx.db.query('visits')) totals.set(r.boxId, (totals.get(r.boxId) ?? 0) + 1);
     for (const [boxId, count] of totals) {
       const row = await ctx.db.query('views').withIndex('by_box', q => q.eq('boxId', boxId)).unique();
-      if (row) await ctx.db.patch(row._id, { count });
-      else await ctx.db.insert('views', { boxId, count });
+      if (!row) await ctx.db.insert('views', { boxId, count });
     }
     return totals.size;
   },

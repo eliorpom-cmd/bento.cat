@@ -129,7 +129,7 @@ describe('visit retention and consent', () => {
     await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
     await a.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'owner-key', consent: true });
     expect(await rows(t, 'visits')).toHaveLength(1);
-    expect((await rows(t, 'views'))[0].count).toBe(1);
+    expect(await rows(t, 'views')).toEqual([]);
   });
 
   it('expires visits in batches at 30 days and stale rate limits without losing aggregates', async () => {
