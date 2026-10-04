@@ -209,9 +209,9 @@ export function EditorView(app, box, opts = {}) {
     showInExplore: box.showInExplore !== false,
   }));
 
-  function save() {
+  function save(o) {
     clearTimeout(S.idleT);
-    saves.changed();
+    saves.changed(o);
   }
 
   const flush = () => saves.flush();
@@ -807,7 +807,7 @@ export function EditorView(app, box, opts = {}) {
     if (!obj) return;
     obj[field] = field === 'html' ? applyMarks(sanitize(f.innerHTML)) : f.textContent.replace(/\s+/g, ' ').trim();
     if (obj.type === 'note') obj.updatedAt = Date.now();
-    save();
+    save({ typing: true });
   });
 
   canvas.addEventListener('focusout', e => {
@@ -978,7 +978,18 @@ export function EditorView(app, box, opts = {}) {
     const el = elOf(id);
     if (!el) return;
     const r = el.getBoundingClientRect();
-    if (r.top < 90 || r.bottom > innerHeight - 100) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // The checklist floats over the bottom-left corner. A tile under it counts as off screen,
+    // and one too tall to fit above it tucks the checklist away rather than hide behind it.
+    const cl = $('#checklist', app);
+    let c = !cl.hidden && cl.getBoundingClientRect();
+    if (c && r.left < c.right && r.right > c.left && r.height > c.top - 16 - 90) {
+      S.clHidden = true; syncChecklist(); c = null;
+      toast('Tucked the checklist away to make room. It’s in your menu.');
+    }
+    const floor = c && r.left < c.right && r.right > c.left ? c.top - 16 : innerHeight - 100;
+    if (r.top >= 90 && r.bottom <= floor) return;
+    if (r.height <= floor - 90) scrollBy({ top: r.bottom > floor ? r.bottom - floor : r.top - 90, behavior: 'smooth' });
+    else el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   async function add(kind, index = nearViewIndex(), extra = {}) {
@@ -1662,11 +1673,20 @@ export function EditorView(app, box, opts = {}) {
       return;
     }
     const ticks = 36, filled = Math.round(n / STEPS.length * ticks), active = done.indexOf(false);
-    card.innerHTML = `
-      <div class="cl-head"><b>Fill your box</b><span class="tnum">${n} of ${STEPS.length}</span><button class="cl-x" data-cl="hide" aria-label="Hide">${I.close()}</button></div>
-      <svg class="cl-ticks" viewBox="0 0 ${ticks * 12} 16" preserveAspectRatio="none">${Array.from({ length: ticks }, (_, i) => `<path d="M${i * 12 + 2} 2v12" stroke="${i < filled - 1 ? '#161616' : i === filled - 1 ? '#F2C14E' : '#E2E2DE'}" stroke-width="3" stroke-linecap="round" style="transition-delay:${i * 12}ms"/>`).join('')}</svg>
-      <div class="cl-list">${STEPS.map((s, i) => `<div class="cl-item ${done[i] ? 'done' : ''} ${done[i] && !prev[i] ? 'just' : ''} ${i === active ? 'active' : ''}" ${done[i] ? '' : `data-cl="${s.k}" role="button" tabindex="0"`}>
-        <span class="cl-box">${done[i] ? I.check('#fff', 10, 2.6) : ''}</span><span class="cl-label">${esc(s.label(box))}</span>${i === active ? '<span class="cl-start">Start</span>' : ''}</div>`).join('')}</div>`;
+    // Build the frame once. Rewriting it on every render swapped the close button out from
+    // under a click whenever pressing it also removed an empty tile.
+    if (!card.querySelector('.cl-head')) {
+      card.innerHTML = `
+      <div class="cl-head"><b>Fill your box</b><span class="tnum"></span><button class="cl-x" data-cl="hide" aria-label="Hide">${I.close()}</button></div>
+      <svg class="cl-ticks" viewBox="0 0 ${ticks * 12} 16" preserveAspectRatio="none">${Array.from({ length: ticks }, (_, i) => `<path d="M${i * 12 + 2} 2v12" stroke-width="3" stroke-linecap="round" style="transition-delay:${i * 12}ms"/>`).join('')}</svg>
+      <div class="cl-list"></div>`;
+    }
+    card.querySelector('.cl-head .tnum').textContent = `${n} of ${STEPS.length}`;
+    card.querySelectorAll('.cl-ticks path').forEach((t, i) => t.setAttribute('stroke', i < filled - 1 ? '#161616' : i === filled - 1 ? '#F2C14E' : '#E2E2DE'));
+    const list = STEPS.map((s, i) => `<div class="cl-item ${done[i] ? 'done' : ''} ${done[i] && !prev[i] ? 'just' : ''} ${i === active ? 'active' : ''}" ${done[i] ? '' : `data-cl="${s.k}" role="button" tabindex="0"`}>
+        <span class="cl-box">${done[i] ? I.check('#fff', 10, 2.6) : ''}</span><span class="cl-label">${esc(s.label(box))}</span>${i === active ? '<span class="cl-start">Start</span>' : ''}</div>`).join('');
+    const cl = card.querySelector('.cl-list');
+    if (cl.innerHTML !== list) cl.innerHTML = list;
   }
 
   $('#checklist', app).addEventListener('click', e => {

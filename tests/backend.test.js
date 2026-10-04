@@ -110,6 +110,18 @@ describe('tile addresses', () => {
   });
 });
 
+describe('purr counts', () => {
+  it('starts a new purr tile at zero whatever count the editor sends', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    await save(a, { tiles: [{ id: 'paw', type: 'purr', count: 9999 }] });
+    expect((await t.query(api.boxes.get, { handle: 'owner' })).tiles[0].count).toBe(0);
+    const { _id: boxId } = await a.query(api.boxes.mine);
+    await expect(t.mutation(api.interactions.purr, { boxId, tileId: 'paw', visitorKey: 'visitor-key-1' })).resolves.toMatchObject({ count: 1 });
+    await save(a, { tiles: [{ id: 'paw', type: 'purr', count: 5000 }] }, 1);
+    expect((await t.query(api.boxes.get, { handle: 'owner' })).tiles[0].count).toBe(1);
+  });
+});
+
 describe('media storage', () => {
   it('rejects oversized and active content before reserving storage', async () => {
     const t = convexTest(schema, modules), a = await owner(t);
@@ -242,6 +254,21 @@ describe('moderation and retention', () => {
     await expect(b.mutation(api.moderation.removeScribble, { id })).rejects.toThrow();
     await a.mutation(api.moderation.removeScribble, { id });
     expect(await t.run(ctx => ctx.db.get(id))).toBeNull();
+  });
+  it('never hands visitor keys to the owner', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    const box = await a.query(api.boxes.mine);
+    await t.run(async ctx => {
+      await ctx.db.insert('scribbles', { boxId: box._id, tileId: 'book', d: 'M1 1 L2 2', name: 'Visitor', visitorKey: 'visitor-key-1' });
+      await ctx.db.insert('subscribers', { boxId: box._id, tileId: 'list', email: 'cat@example.com', visitorKey: 'visitor-key-1' });
+    });
+    const opts = { paginationOpts: { numItems: 10, cursor: null } };
+    const [scribble] = (await a.query(api.moderation.scribbles, opts)).page;
+    const [subscriber] = (await a.query(api.moderation.subscribers, opts)).page;
+    expect(scribble).toMatchObject({ name: 'Visitor', d: 'M1 1 L2 2' });
+    expect(subscriber).toMatchObject({ email: 'cat@example.com' });
+    expect(scribble).not.toHaveProperty('visitorKey');
+    expect(subscriber).not.toHaveProperty('visitorKey');
   });
   it('removes only the matching browser’s subscription', async () => {
     const t = convexTest(schema, modules), a = await owner(t), box = await a.query(api.boxes.mine);

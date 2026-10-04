@@ -28,7 +28,8 @@ export function publicUrl(raw) {
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
   if (u.username || u.password) return null;
   if (u.port && u.port !== '80' && u.port !== '443') return null;
-  const h = u.hostname.toLowerCase();
+  // A trailing dot is the same host to DNS ("localhost." is localhost), so drop it before checking.
+  const h = u.hostname.toLowerCase().replace(/\.+$/, '');
   if (!h.includes('.') || h.includes(':') || h.startsWith('[')) return null;
   if (/(^|\.)(localhost|local|internal|lan|home|corp|intranet)$/.test(h)) return null;
   if (privateV4(h)) return null;
