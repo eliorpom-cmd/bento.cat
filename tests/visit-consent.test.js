@@ -24,10 +24,23 @@ describe('browser storage', () => {
     Visitor.set('purr', 'mia/purr1', true);
     expect(first).toHaveLength(32);
     expect(Visitor.get('purr', 'mia/purr1')).toBe(true);
-    expect(local.setItem).not.toHaveBeenCalled();
+    // Only the list of purred tiles is written, after the tap. It holds no identifier.
+    expect(local.setItem.mock.calls).toEqual([['bento.cat/purred.v1', JSON.stringify(['mia/purr1'])]]);
     expect(values.has('bento.cat/visitor-key')).toBe(false);
     Visitor.load();
     expect(Visitor.key).not.toBe(first);
+  });
+});
+
+describe('purred tiles', () => {
+  it('remembers purred tiles across a reload so a purr counts once', () => {
+    Visitor.load();
+    Visitor.set('purr', 'mia/purr1', true);
+    const key = Visitor.key;
+    Visitor.load();
+    expect(Visitor.get('purr', 'mia/purr1')).toBe(true);
+    expect(Visitor.get('purr', 'mia/purr2')).toBeUndefined();
+    expect(Visitor.key).not.toBe(key);
   });
 });
 
