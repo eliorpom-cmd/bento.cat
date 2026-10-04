@@ -3,18 +3,24 @@ import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { requireOwnBox } from './lib';
 
+// Owners see what was left, never the visitor key it was left with: that key is
+// what lets a visitor unsubscribe or forget their visits.
+const without = (page, pick) => ({ ...page, page: page.page.map(pick) });
+
 export const scribbles = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, { paginationOpts }) => {
     const { box } = await requireOwnBox(ctx);
-    return await ctx.db.query('scribbles').withIndex('by_box_tile', q => q.eq('boxId', box._id)).order('desc').paginate(paginationOpts);
+    const page = await ctx.db.query('scribbles').withIndex('by_box_tile', q => q.eq('boxId', box._id)).order('desc').paginate(paginationOpts);
+    return without(page, ({ _id, _creationTime, tileId, d, name }) => ({ _id, _creationTime, tileId, d, name }));
   },
 });
 export const subscribers = query({
   args: { paginationOpts: paginationOptsValidator },
   handler: async (ctx, { paginationOpts }) => {
     const { box } = await requireOwnBox(ctx);
-    return await ctx.db.query('subscribers').withIndex('by_box_tile_email', q => q.eq('boxId', box._id)).paginate(paginationOpts);
+    const page = await ctx.db.query('subscribers').withIndex('by_box_tile_email', q => q.eq('boxId', box._id)).paginate(paginationOpts);
+    return without(page, ({ _id, _creationTime, tileId, email }) => ({ _id, _creationTime, tileId, email }));
   },
 });
 async function remove(ctx, table, id) {
