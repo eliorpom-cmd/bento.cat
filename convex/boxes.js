@@ -149,7 +149,17 @@ export const save = mutation({
     // What visitors left on a removed tile goes too, after the same grace as media so Undo can bring it back.
     if (patch.tiles) {
       const kept = new Set(patch.tiles.map(t => t.id));
+      for (const tileId of kept) {
+        const queued = await ctx.db.query('tilePurges').withIndex('by_box_tile', q => q.eq('boxId', box._id).eq('tileId', tileId)).unique();
+        if (queued) await ctx.db.delete(queued._id);
+      }
       const tileIds = box.tiles.filter(t => TILE_ROWS.some(([, , types]) => types.includes(t.type)) && !kept.has(t.id)).map(t => t.id);
+      for (const tileId of tileIds) {
+        const queued = await ctx.db.query('tilePurges').withIndex('by_box_tile', q => q.eq('boxId', box._id).eq('tileId', tileId)).unique();
+        const expiresAt = updatedAt + UNUSED_FILE_TTL;
+        if (queued) await ctx.db.patch(queued._id, { expiresAt });
+        else await ctx.db.insert('tilePurges', { boxId: box._id, tileId, expiresAt });
+      }
       if (tileIds.length) await ctx.scheduler.runAfter(UNUSED_FILE_TTL, internal.boxes.purgeTiles, { boxId: box._id, tileIds });
     }
     // Seed counters for new purr tiles so visitor purrs have something to add to.
@@ -223,6 +233,7 @@ export const remove = mutation({
 });
 
 const PURGE = [
+  ['tilePurges', 'by_box_tile'],
   ['counters', 'by_box_tile'],
   ['purrs', 'by_box_visitor'],
   ['scribbles', 'by_box_tile'],
@@ -240,22 +251,36 @@ const TILE_ROWS = [
   ['subscribers', 'by_box_tile_email', ['subscribe']],
 ];
 
-// Clears what visitors left on tiles that are still gone, a batch at a time.
+// One budget for all tiles and tables, including removal of the queue markers.
+const TILE_PURGE_BATCH = 400;
+
+// Clears what visitors left on tiles that have been gone for the full grace period.
 export const purgeTiles = internalMutation({
   args: { boxId: v.id('boxes'), tileIds: v.array(v.string()) },
   handler: async (ctx, { boxId, tileIds }) => {
     const box = await ctx.db.get(boxId);
     if (!box) return;
-    const gone = tileIds.filter(id => !box.tiles.some(t => t.id === id));
-    let left = false;
-    for (const tileId of gone) {
-      for (const [table, index] of TILE_ROWS) {
-        const rows = await ctx.db.query(table).withIndex(index, q => q.eq('boxId', boxId).eq('tileId', tileId)).take(400);
-        for (const r of rows) await ctx.db.delete(r._id);
-        if (rows.length === 400) left = true;
+    const kept = new Set(box.tiles.map(t => t.id));
+    let remaining = TILE_PURGE_BATCH;
+    for (let i = 0; i < tileIds.length; i++) {
+      const tileId = tileIds[i];
+      const queued = await ctx.db.query('tilePurges').withIndex('by_box_tile', q => q.eq('boxId', boxId).eq('tileId', tileId)).unique();
+      if (!queued || queued.expiresAt > Date.now() || kept.has(tileId)) continue;
+      if (!remaining) {
+        await ctx.scheduler.runAfter(0, internal.boxes.purgeTiles, { boxId, tileIds: tileIds.slice(i) });
+        return;
       }
+      for (const [table, index] of TILE_ROWS) {
+        const rows = await ctx.db.query(table).withIndex(index, q => q.eq('boxId', boxId).eq('tileId', tileId)).take(remaining);
+        for (const r of rows) { await ctx.db.delete(r._id); remaining--; }
+        if (!remaining) {
+          await ctx.scheduler.runAfter(0, internal.boxes.purgeTiles, { boxId, tileIds: tileIds.slice(i) });
+          return;
+        }
+      }
+      await ctx.db.delete(queued._id);
+      remaining--;
     }
-    if (left) await ctx.scheduler.runAfter(0, internal.boxes.purgeTiles, { boxId, tileIds: gone });
   },
 });
 

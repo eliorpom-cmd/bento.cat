@@ -76,6 +76,13 @@ export default defineSchema({
     .index('by_owner', ['ownerId'])
     .index('by_updated', ['updatedAt']),
 
+  // Current expiry for removed tiles. Old jobs must respect a later removal's grace.
+  tilePurges: defineTable({
+    boxId: v.id('boxes'),
+    tileId: v.string(),
+    expiresAt: v.number(),
+  }).index('by_box_tile', ['boxId', 'tileId']),
+
   // Visitor activity lives outside the box so the owner's saves never clobber it.
   counters: defineTable({
     boxId: v.id('boxes'),
