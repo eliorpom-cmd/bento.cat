@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createSaveQueue, draftJournal } from '../src/lib/save-queue.js';
+import { TYPING_PAUSE, createSaveQueue, draftJournal } from '../src/lib/save-queue.js';
 
 const copy = data => JSON.parse(JSON.stringify(data));
 function memory() {
@@ -25,6 +25,40 @@ describe('autosave recovery', () => {
     await vi.advanceTimersByTimeAsync(700);
     expect(t.save).toHaveBeenCalledTimes(1);
     expect(t.record).toBeNull();
+  });
+  it('counts a run of keystrokes as one change and saves after the typing pauses', async () => {
+    const states = [];
+    const t = setup({ onState: (state, pending) => states.push(pending) });
+    for (const name of ['F', 'Fi', 'Fir', 'Firs']) {
+      t.data = { name, tiles: [] };
+      t.queue.changed({ typing: true });
+      expect(t.record.data.name).toBe(name);
+      await vi.advanceTimersByTimeAsync(TYPING_PAUSE - 100);
+    }
+    expect(t.save).not.toHaveBeenCalled();
+    expect(t.queue.pending).toBe(1);
+    // Letting go of the field is the same change, saved without waiting for the pause.
+    t.queue.changed();
+    expect(t.queue.pending).toBe(1);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(t.save).toHaveBeenCalledTimes(1);
+    expect(t.save.mock.calls[0][0].data.name).toBe('Firs');
+    expect(Math.max(...states)).toBe(1);
+  });
+  it('saves keys typed while the previous burst is being saved', async () => {
+    let resolve;
+    const save = vi.fn(args => new Promise(r => { resolve = () => r({ revision: args.expectedRevision + 1 }); }));
+    const t = setup({ save });
+    t.queue.changed({ typing: true });
+    await vi.advanceTimersByTimeAsync(TYPING_PAUSE);
+    expect(save).toHaveBeenCalledTimes(1);
+    t.data = { name: 'Typed during the save', tiles: [] };
+    t.queue.changed({ typing: true });
+    resolve(); await vi.advanceTimersByTimeAsync(0);
+    expect(t.queue.pending).toBe(1);
+    await vi.advanceTimersByTimeAsync(TYPING_PAUSE);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0].data.name).toBe('Typed during the save');
   });
   it('serializes edits made while a save is in flight', async () => {
     let resolve;

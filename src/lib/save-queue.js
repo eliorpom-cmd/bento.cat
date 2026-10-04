@@ -38,8 +38,10 @@ export function draftJournal(boxId, storage, session) {
   };
 }
 
+export const TYPING_PAUSE = 1500;
+
 export function createSaveQueue({ revision = 0, lastSaveId, getData, save, journal, onState = () => {}, onConflict = () => {}, onStorageError = () => {} }) {
-  let pending = 0, inFlight = null, timer, disposed = false, paused = false, attempt = null, storageWarned = false, rejected = false;
+  let pending = 0, inFlight = null, timer, disposed = false, paused = false, attempt = null, storageWarned = false, rejected = false, burst = false;
   const recovered = journal.load();
   let recovery = recovered?.data ? copy(recovered.data) : null;
   if (recovery) {
@@ -65,15 +67,20 @@ export function createSaveQueue({ revision = 0, lastSaveId, getData, save, journ
     clearTimeout(timer);
     if (!disposed && !paused) timer = setTimeout(() => { void flush(); }, ms);
   }
-  function changed() {
+  // Keystrokes in a field are one change. The draft stays current on every key,
+  // but the save waits for a pause in the typing, or for the field to let go.
+  function changed({ typing = false } = {}) {
     if (rejected && !paused) { attempt = null; rejected = false; }
-    pending++;
+    if (!burst) pending++;
+    burst = typing;
     persist();
     onState(paused ? 'error' : 'saving', pending);
-    schedule(700);
+    schedule(typing ? TYPING_PAUSE : 700);
   }
   async function drain() {
     while (pending && !paused) {
+      // Keys typed after this snapshot are a new change.
+      if (!attempt) burst = false;
       attempt ||= { data: copy(getData()), expectedRevision: revision, saveId: id(), count: pending };
       persist();
       try {
