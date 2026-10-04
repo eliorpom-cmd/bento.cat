@@ -45,7 +45,7 @@ const str = (s, max) => (typeof s === 'string' ? s.slice(0, max) : '');
 const safeUrl = s => (typeof s === 'string' && /^https?:\/\//i.test(s) && s.length < 2048 ? s : '');
 
 // Fields that end up in a src, href or CSS url(), and fields that end up in a style.
-const URL_KEYS = new Set(['url', 'src', 'cover', 'video', 'before', 'avatar']);
+const URL_KEYS = new Set(['url', 'src', 'cover', 'video', 'before', 'avatar', 'audio']);
 const COLOR_KEYS = new Set(['bg', 'fg']);
 const POS_RE = /^-?\d{1,3}(\.\d+)?%( -?\d{1,3}(\.\d+)?%)?$/;
 

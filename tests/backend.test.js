@@ -99,6 +99,17 @@ describe('Explore visibility', () => {
   });
 });
 
+describe('tile addresses', () => {
+  it('keeps only web addresses in fields that end up in a src or href', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    await save(a, { tiles: [{ id: 'say', type: 'sayname', audio: 'javascript:alert(1)', url: 'vbscript:x', cover: 'https://example.com/a.png' }] });
+    const [tile] = (await a.query(api.boxes.mine)).tiles;
+    expect(tile.audio).toBe('');
+    expect(tile.url).toBe('');
+    expect(tile.cover).toBe('https://example.com/a.png');
+  });
+});
+
 describe('media storage', () => {
   it('rejects oversized and active content before reserving storage', async () => {
     const t = convexTest(schema, modules), a = await owner(t);
