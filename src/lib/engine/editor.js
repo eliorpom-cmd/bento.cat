@@ -4,7 +4,7 @@ import { createSaveQueue, draftJournal } from '../save-queue.js';
 import { VisitConsent } from '../visit-consent.js';
 import { hasCoords, zoomOf } from './map.js';
 import { AVATAR_SHAPES, DAY, sz } from './data.js';
-import { ALL_POSES, POSES, TINTS, TYPES, bg, corner, num, paintRange, serviceOf, sizeOf, tilesFor, titleOf } from './tiles.js';
+import { ALL_POSES, POSES, TINTS, TYPES, bg, corner, num, paintRange, serviceOf, sizeOf, tilesFor, tintOf, titleOf } from './tiles.js';
 import { $, $$, Cat, I, Pop, applyMarks, catLogo, clamp, esc, fmtHour, fmtSec, h, handleCheck, hash, hostOf, htmlText, looksLikeUrl, normUrl, pickFiles, platformOf, plural, poseForRatio, sanitize, toast, tzOffset, uid } from './util.js';
 
 /* The editor. Edit right on the page; controls appear beside the thing you touch. */
@@ -305,8 +305,8 @@ export function EditorView(app, box, opts = {}) {
       tools.push(`<button class="tb-b" data-tb="replace-before" data-tip="${t.before ? 'Replace before photo' : 'Add a before photo'}" aria-label="Replace before photo">${I.upload(t.before ? '#FFFFFF' : '#F2C14E')}</button>`);
       tools.push(`<button class="tb-b" data-tb="replace" data-tip="Replace after photo" aria-label="Replace after photo">${I.upload()}</button>`);
     }
+    if (t.type === 'note' || t.type === 'purr') tools.push(`<button class="tb-b" data-tb="tint" data-tip="Colour" aria-label="Colour"><span class="swatch" style="background:${TINTS[tintOf(t)].bg}"></span></button>`);
     if (t.type === 'note') {
-      tools.push(`<button class="tb-b" data-tb="tint" data-tip="Colour" aria-label="Colour"><span class="swatch" style="background:${TINTS[t.tint || 'curb'].bg}"></span></button>`);
       tools.push(`<button class="tb-b" data-tb="align" data-tip="Align" aria-label="Align">${I.align('#fff', 16, t.align || 'left')}</button>`);
     }
     if (t.type === 'sayname') {
@@ -401,7 +401,7 @@ export function EditorView(app, box, opts = {}) {
   }
 
   function openTintPop(t, anchor) {
-    const pop = Pop.open(`<div class="tints">${Object.entries(TINTS).map(([k, v]) => `<button class="tint-b ${(t.tint || 'curb') === k ? 'on' : ''}" data-tint="${k}" data-tip="${v.name}" style="background:${v.bg}" aria-label="${v.name}"></button>`).join('')}</div>`, anchor, { cls: 'pop-tints' });
+    const pop = Pop.open(`<div class="tints">${Object.entries(TINTS).map(([k, v]) => `<button class="tint-b ${tintOf(t) === k ? 'on' : ''}" data-tint="${k}" data-tip="${v.name}" style="background:${v.bg}" aria-label="${v.name}"></button>`).join('')}</div>`, anchor, { cls: 'pop-tints' });
     pop.addEventListener('click', ev => {
       const b = ev.target.closest('[data-tint]');
       if (!b) return;
