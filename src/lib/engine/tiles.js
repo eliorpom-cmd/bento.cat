@@ -117,7 +117,7 @@ export function linkIcon(t) {
 }
 
 export function previewHtml(p) {
-  if (p.kind === 'image') return `<div class="preview img" style="${bg(p.src)}"></div>`;
+  if (p.kind === 'image') return `<div class="preview img"><img src="${safeSrc(p.src)}" alt="" loading="lazy" referrerpolicy="no-referrer"></div>`;
   const fg = cssColor(p.fg, '#161616');
   return `<div class="preview" style="background:${cssColor(p.bg, '#F4F4F2')};color:${fg}"><div class="pv-label" style="color:${cssColor(p.sub, fg)}">${esc(p.label)}</div><div class="pv-big">${esc(p.big)}</div></div>`;
 }
