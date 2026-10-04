@@ -72,6 +72,21 @@ function cleanValue(value, depth = 0, key = '') {
   return null;
 }
 
+// Tiles still waiting for their content: a link or song with no address yet, a map
+// with no place, a note or section title with no words. The editor keeps them so
+// people can lay out a box first, but visitors never get them.
+const words = html => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+export function isBlank(t) {
+  if (t.draft) return true;
+  switch (t.type) {
+    case 'link': case 'music': return !String(t.url ?? '').trim();
+    case 'map': return !String(t.place ?? '').trim() && !(Number.isFinite(t.lat) && Number.isFinite(t.lon));
+    case 'note': return !words(t.html);
+    case 'section': return !String(t.text ?? '').trim();
+    default: return false;
+  }
+}
+
 export function cleanTiles(tiles) {
   if (!Array.isArray(tiles)) return [];
   const ids = new Set();

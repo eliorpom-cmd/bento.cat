@@ -2,13 +2,14 @@ import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query } from './_generated/server';
 import {
-  NEW_SUGGESTIONS, boxByHandle, boxOfUser, cleanProfile, currentUser, handleState, requireOwnBox, requireUser,
+  NEW_SUGGESTIONS, boxByHandle, boxOfUser, cleanProfile, currentUser, handleState, isBlank, requireOwnBox, requireUser,
 } from './lib';
 import { syncReferences } from './files';
 import { eraseUser } from './accounts';
 
 // Everything a page needs to draw a box, with live counts and what this visitor already did.
-async function present(ctx, box, visitorKey) {
+// Visitors get only finished tiles; the owner's editor gets everything.
+async function present(ctx, box, visitorKey, { blanks = false } = {}) {
   const counters = await ctx.db.query('counters').withIndex('by_box_tile', q => q.eq('boxId', box._id)).collect();
   const counts = Object.fromEntries(counters.map(c => [c.tileId, c.count]));
 
@@ -26,7 +27,7 @@ async function present(ctx, box, visitorKey) {
   }
 
   const user = await currentUser(ctx);
-  const tiles = box.tiles.map(t => (t.type === 'purr' ? { ...t, count: counts[t.id] ?? t.count ?? 0 } : t));
+  const tiles = box.tiles.filter(t => blanks || !isBlank(t)).map(t => (t.type === 'purr' ? { ...t, count: counts[t.id] ?? t.count ?? 0 } : t));
 
   return {
     _id: box._id,
@@ -64,7 +65,7 @@ export const mine = query({
     if (!user) return null;
     const box = await boxOfUser(ctx, user._id);
     if (!box) return null;
-    const view = await present(ctx, box, null);
+    const view = await present(ctx, box, null, { blanks: true });
     return {
       ...view,
       email: user.email ?? null,
