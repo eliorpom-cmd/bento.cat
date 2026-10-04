@@ -553,6 +553,9 @@ button.knock:hover { background: #2C2C2C; }
 .dock-b:hover { background: var(--curb); }
 .dock-b:active { background: var(--line2); }
 .dock-div { width: 1px; height: 20px; background: #E4E4E0; flex-shrink: 0; margin: 0 2px; }
+.dock-tools.swap-out .dock-b, .dock-tools.swap-out .dock-div { opacity: 0; transform: translateY(6px) scale(.7); transition: opacity .12s, transform .12s; pointer-events: none; }
+.dock-tools.swap-in .dock-b, .dock-tools.swap-in .dock-div { animation: dockIn .36s var(--pop) both; animation-delay: calc(var(--i, 0) * 28ms); }
+@keyframes dockIn { from { opacity: 0; transform: translateY(8px) scale(.5); } }
 .dock-tip { position: absolute; bottom: 52px; transform: translateX(-50%); background: var(--fur); color: #fff; font-size: 12px; line-height: 16px; padding: 4px 9px; border-radius: 8px; opacity: 0; transition: opacity .12s; pointer-events: none; white-space: nowrap; }
 .dock-tip.in { opacity: 1; }
 .dock-r { display: flex; align-items: center; gap: 10px; height: 40px; }

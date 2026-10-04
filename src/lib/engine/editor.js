@@ -1198,16 +1198,25 @@ export function EditorView(app, box, opts = {}) {
     tip.classList.add('in');
   });
   dock.addEventListener('pointerleave', () => tip.classList.remove('in'));
-  const dockButtons = set => set.map(a => `<button class="dock-b" data-add="${a.kind}" data-label="${a.label}" aria-label="${a.label}">${a.icon('#161616', 18)}</button>`).join('');
+  const dockButtons = (set, from = 0) => set.map((a, i) => `<button class="dock-b" data-add="${a.kind}" data-label="${a.label}" aria-label="${a.label}" style="--i:${from + i}">${a.icon('#161616', 18)}</button>`).join('');
   // The paw swaps the dock over to the tiles that react; the arrow swaps it back.
+  // The old set drops away and the new one pops in, so the swap reads as a new set.
   function flipDock(more, keyboard) {
     tip.classList.remove('in');
-    dock.querySelectorAll('.dock-b, .dock-div').forEach(b => b.remove());
-    tip.insertAdjacentHTML('beforebegin', more
-      ? `<button class="dock-b" data-add="back" data-label="Back" aria-label="Back">${I.back()}</button><i class="dock-div"></i>${dockButtons(MORE)}`
-      : dockButtons(ADD));
-    dock.closest('.dock').classList.toggle('more', more);
-    if (keyboard) dock.querySelector('.dock-b').focus();
+    clearTimeout(S.dockT);
+    dock.classList.remove('swap-in');
+    dock.classList.add('swap-out');
+    S.dockT = setTimeout(() => {
+      dock.querySelectorAll('.dock-b, .dock-div').forEach(b => b.remove());
+      tip.insertAdjacentHTML('beforebegin', more
+        ? `<button class="dock-b" data-add="back" data-label="Back" aria-label="Back" style="--i:0">${I.back()}</button><i class="dock-div" style="--i:0"></i>${dockButtons(MORE, 1)}`
+        : dockButtons(ADD));
+      dock.closest('.dock').classList.toggle('more', more);
+      dock.classList.remove('swap-out');
+      dock.classList.add('swap-in');
+      S.dockT = setTimeout(() => dock.classList.remove('swap-in'), 600);
+      if (keyboard) dock.querySelector('.dock-b').focus();
+    }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 120);
   }
   dock.addEventListener('click', e => {
     const b = e.target.closest('[data-add]');
