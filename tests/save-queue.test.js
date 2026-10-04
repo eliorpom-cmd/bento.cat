@@ -56,9 +56,27 @@ describe('autosave recovery', () => {
     t.queue.changed({ typing: true });
     resolve(); await vi.advanceTimersByTimeAsync(0);
     expect(t.queue.pending).toBe(1);
-    await vi.advanceTimersByTimeAsync(TYPING_PAUSE);
+    // The earlier save finishing doesn't cut the new burst short.
+    await vi.advanceTimersByTimeAsync(TYPING_PAUSE - 100);
+    t.queue.changed({ typing: true });
+    await vi.advanceTimersByTimeAsync(TYPING_PAUSE - 100);
+    expect(save).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(100);
     expect(save).toHaveBeenCalledTimes(2);
     expect(save.mock.calls[1][0].data.name).toBe('Typed during the save');
+  });
+  it('still saves at once when asked to, even mid-burst', async () => {
+    let resolve;
+    const save = vi.fn(args => new Promise(r => { resolve = () => r({ revision: args.expectedRevision + 1 }); }));
+    const t = setup({ save });
+    t.queue.changed({ typing: true });
+    await vi.advanceTimersByTimeAsync(TYPING_PAUSE);
+    t.queue.changed({ typing: true });
+    const done = t.queue.flush();
+    resolve(); await vi.advanceTimersByTimeAsync(0);
+    resolve(); await done;
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(t.queue.pending).toBe(0);
   });
   it('serializes edits made while a save is in flight', async () => {
     let resolve;

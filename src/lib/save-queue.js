@@ -41,7 +41,7 @@ export function draftJournal(boxId, storage, session) {
 export const TYPING_PAUSE = 1500;
 
 export function createSaveQueue({ revision = 0, lastSaveId, getData, save, journal, onState = () => {}, onConflict = () => {}, onStorageError = () => {} }) {
-  let pending = 0, inFlight = null, timer, disposed = false, paused = false, attempt = null, storageWarned = false, rejected = false, burst = false;
+  let pending = 0, inFlight = null, timer, disposed = false, paused = false, attempt = null, storageWarned = false, rejected = false, burst = false, urgent = false;
   const recovered = journal.load();
   let recovery = recovered?.data ? copy(recovered.data) : null;
   if (recovery) {
@@ -65,7 +65,7 @@ export function createSaveQueue({ revision = 0, lastSaveId, getData, save, journ
   };
   function schedule(ms) {
     clearTimeout(timer);
-    if (!disposed && !paused) timer = setTimeout(() => { void flush(); }, ms);
+    if (!disposed && !paused) timer = setTimeout(() => { void flush(false); }, ms);
   }
   // Keystrokes in a field are one change. The draft stays current on every key,
   // but the save waits for a pause in the typing, or for the field to let go.
@@ -91,6 +91,8 @@ export function createSaveQueue({ revision = 0, lastSaveId, getData, save, journ
         pending = Math.max(0, pending - count);
         if (!pending) journal.clear(); else persist();
         onState(pending ? 'saving' : 'saved', pending);
+        // Still typing: let the burst pause before the next save, unless someone asked for it now.
+        if (pending && burst && !urgent) { schedule(TYPING_PAUSE); break; }
       } catch (error) {
         rejected = error?.data !== undefined;
         if (error?.data?.code === 'SAVE_CONFLICT') {
@@ -103,11 +105,13 @@ export function createSaveQueue({ revision = 0, lastSaveId, getData, save, journ
     }
     return !paused;
   }
-  function flush() {
+  // The timer flushes when a pause is due; anyone else (blur, leaving, logging out) wants it now.
+  function flush(now = true) {
     clearTimeout(timer);
+    if (now) urgent = true;
     if (paused) return Promise.resolve(false);
     if (inFlight) return inFlight;
-    inFlight = drain().finally(() => { inFlight = null; });
+    inFlight = drain().finally(() => { inFlight = null; urgent = false; });
     return inFlight;
   }
   return {
