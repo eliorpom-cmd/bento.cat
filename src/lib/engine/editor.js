@@ -206,6 +206,7 @@ export function EditorView(app, box, opts = {}) {
   const payload = () => JSON.parse(JSON.stringify({
     name: box.name, bio: box.bio, avatar: box.avatar ?? null, avatarVideo: box.avatarVideo ?? null, avatarPos: box.avatarPos, avatarShape: box.avatarShape,
     tiles: box.tiles, mobile: box.mobile ? orderIdsOf(box, 'm') : undefined, suggestions: box.suggestions || [], onboarding: !!box.onboarding, shared: !!box.shared,
+    showInExplore: box.showInExplore !== false,
   }));
 
   function save() {
@@ -1234,7 +1235,7 @@ export function EditorView(app, box, opts = {}) {
       { icon: I.mail(), title: 'Add a subscribe box', sub: 'Collect emails for your newsletter', words: 'subscribe newsletter email list react', run: () => add('subscribe') },
       { icon: I.arrow('#161616', 16), title: 'Share your box', sub: `bento.cat/${box.handle}`, words: 'share copy link tweet', run: () => openShare($('[data-ed="share"]', app)) },
       { icon: I.search(), title: 'See your visits', sub: 'Who came by, and when', words: 'visits stats views analytics', run: () => openVisits() },
-      { icon: I.section(), title: 'Page settings', sub: 'Your address, your data', words: 'settings address handle rename export delete', run: () => openSettings($('#bSettings', app)) },
+      { icon: I.section(), title: 'Page settings', sub: 'Your address, discovery, your data', words: 'settings address handle rename explore discovery visibility export delete', run: () => openSettings($('#bSettings', app)) },
     ];
     for (const it of pool) if (!ql || ql.split(/\s+/).every(w => (it.title + ' ' + it.words).toLowerCase().includes(w))) out.push(it);
     if (q) {
@@ -1493,6 +1494,12 @@ export function EditorView(app, box, opts = {}) {
         <small class="hs-msg">&nbsp;</small></label>
       <button class="btn btn-dark sm" data-set="handle" disabled>Change address</button>
       <hr>
+      <label class="settings-toggle">
+        <span>Show in Explore</span>
+        <input type="checkbox" role="switch" data-set="explore" aria-describedby="explore-hint" ${box.showInExplore !== false ? 'checked' : ''}>
+      </label>
+      <p class="t-meta" id="explore-hint">Help people find your box in Explore. Your link stays public when this is off.</p>
+      <hr>
       <button class="menu-i" data-set="export">${I.download()}<span>Download your data</span></button>
       <div class="danger">
         <button class="menu-i danger-i" data-set="delete">${I.close('currentColor', 14)}<span>Delete your box</span></button>
@@ -1502,7 +1509,10 @@ export function EditorView(app, box, opts = {}) {
         </div>
       </div>
     </div>`, anchor, { align: 'right', cls: 'pop-settings' });
-    const inp = pop.querySelector('input'), msg = pop.querySelector('.hs-msg'), dot = pop.querySelector('.hs'), btn = pop.querySelector('[data-set="handle"]');
+    const inp = pop.querySelector('.handle-in input'), msg = pop.querySelector('.hs-msg'), dot = pop.querySelector('.hs'), btn = pop.querySelector('[data-set="handle"]');
+    pop.querySelector('[data-set="explore"]').addEventListener('change', e => {
+      commit(b => { b.showInExplore = e.target.checked; }, { animate: false });
+    });
     let ticket = 0, timer;
     const check = async () => {
       const mine = ++ticket;

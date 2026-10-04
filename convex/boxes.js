@@ -70,6 +70,7 @@ export const mine = query({
       email: user.email ?? null,
       onboarding: !!box.onboarding,
       shared: !!box.shared,
+      showInExplore: box.showInExplore !== false,
       suggestions: box.suggestions ?? [],
       revision: box.revision ?? 0,
       lastSaveId: box.lastSaveId ?? null,
@@ -169,7 +170,7 @@ export const explore = query({
   args: {},
   handler: async ctx => {
     const picked = new Map();
-    const add = b => b && b.tiles.length > 0 && picked.size < EXPLORE && picked.set(b._id, b);
+    const add = b => b && b.showInExplore !== false && b.tiles.length > 0 && picked.size < EXPLORE && picked.set(b._id, b);
     for (const row of await ctx.db.query('views').withIndex('by_count').order('desc').take(EXPLORE * 3)) add(await ctx.db.get(row.boxId));
     if (picked.size < EXPLORE) {
       for (const b of await ctx.db.query('boxes').withIndex('by_updated').order('desc').take(60)) if (!picked.has(b._id)) add(b);
