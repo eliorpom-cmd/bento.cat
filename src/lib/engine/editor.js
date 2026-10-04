@@ -1,7 +1,6 @@
 import { action, clerk, mutation, posterOf, query, reason, upload, watch } from '../api.js';
 import { Box } from './box.js';
 import { createSaveQueue, draftJournal } from '../save-queue.js';
-import { VisitConsent } from '../visit-consent.js';
 import { hasCoords, zoomOf } from './map.js';
 import { AVATAR_SHAPES, DAY, sz } from './data.js';
 import { ALL_POSES, POSES, TINTS, TYPES, bg, corner, num, paintRange, serviceOf, sizeOf, tilesFor, tintOf, titleOf } from './tiles.js';
@@ -206,7 +205,7 @@ export function EditorView(app, box, opts = {}) {
   const payload = () => JSON.parse(JSON.stringify({
     name: box.name, bio: box.bio, avatar: box.avatar ?? null, avatarVideo: box.avatarVideo ?? null, avatarPos: box.avatarPos, avatarShape: box.avatarShape,
     tiles: box.tiles, mobile: box.mobile ? orderIdsOf(box, 'm') : undefined, suggestions: box.suggestions || [], onboarding: !!box.onboarding, shared: !!box.shared,
-    showInExplore: box.showInExplore !== false,
+    showInExplore: box.showInExplore !== false, shareVisits: box.shareVisits !== false,
   }));
 
   function save(o) {
@@ -1468,20 +1467,22 @@ export function EditorView(app, box, opts = {}) {
     const times = data?.times || [];
     const head = drawer.querySelector('.dr-head').outerHTML + (data ? `<section class="sniff"><div class="sniff-top"><span class="big tnum">${(data.pageViews ?? 0).toLocaleString('en-GB')}</span><span>total page views</span></div><p class="t-meta">Counted without identifying visitors. Repeat loads and your own views count too.</p></section>` : '');
 
-    if (!times.length) {
-      drawer.innerHTML = head + `<section class="dr-empty">${catLogo(64, { live: true })}<b>No individual visits recorded yet.</b><span>Visit times and visitor profiles appear only when visitors opt in. Share your box in a bio, a signature or a group chat.</span><button class="btn btn-dark" data-v="share">Share your box</button></section>`;
+    // Page views per hour, counted without knowing who; this browser places them in its time zone.
+    const hours = data?.hours || [];
+    const views30 = hours.reduce((n, [, c]) => n + c, 0);
+    if (!views30 && !times.length) {
+      drawer.innerHTML = head + `<section class="dr-empty">${catLogo(64, { live: true })}<b>No visits in the last 30 days.</b><span>Share your box in a bio, a signature or a group chat.</span><button class="btn btn-dark" data-v="share">Share your box</button></section>`;
       return;
     }
 
-    // Bucket visits by weekday and hour in this browser's time zone.
     const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
     const now = new Date();
     const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     let yesterday = 0;
-    for (const t of times) {
-      const d = new Date(t);
-      grid[(d.getDay() + 6) % 7][d.getHours()]++;
-      if (t >= startToday - DAY && t < startToday) yesterday++;
+    for (const [at, n] of hours) {
+      const d = new Date(at);
+      grid[(d.getDay() + 6) % 7][d.getHours()] += n;
+      if (at >= startToday - DAY && at < startToday) yesterday += n;
     }
     const today = (now.getDay() + 6) % 7, hourNow = now.getHours();
     const max = Math.max(1, ...grid.flat());
@@ -1491,27 +1492,26 @@ export function EditorView(app, box, opts = {}) {
     const part = bestH < 6 ? 'Nights' : bestH < 12 ? 'Mornings' : bestH < 17 ? 'Afternoons' : 'Evenings';
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const viewers = data.viewers || [];
-    const anon = Math.max(0, times.length - (data.signedInCount || 0));
     const who = viewers.length
-      ? `${esc(viewers.map(v => v.name.split(' ')[0]).join(', '))} came by${anon ? `, plus ${plural(anon, 'visit')} from people who weren’t signed in` : ''}.`
-      : `None of them were signed in, so they stay a mystery.`;
+      ? `${esc(viewers.map(v => v.name.split(' ')[0]).join(', '))} came by while signed in.`
+      : `Nobody signed in with a box came by, so your visitors stay a mystery.`;
 
     drawer.innerHTML = head + `<section class="sniff">
-        <div class="sniff-top"><span class="big tnum">${yesterday}</span><span>${yesterday === 1 ? 'visit' : 'visits'} yesterday</span></div>
+        <div class="sniff-top"><span class="big tnum">${yesterday}</span><span>${yesterday === 1 ? 'view' : 'views'} yesterday</span></div>
         <div class="sniff-who">${viewers.length ? `<div class="faces">${viewers.map(v => `<a href="/${esc(v.handle)}" class="face av-${esc(v.avatarShape)}" style="${v.avatar ? bg(v.avatar) : 'background:#E4E4E0'}" data-tip="bento.cat/${esc(v.handle)}" aria-label="${esc(v.name)}"></a>`).join('')}</div>` : ''}
         <div class="t-meta">${who}</div></div>
       </section>
       <section class="when">
-        <div class="when-head"><div><b>When they come by</b><span>Last 30 days, in your time zone</span></div>${times.length >= 5 ? `<div class="busy"><b>${part}, ${fmtHour(bestH)} to ${fmtHour(bestH + 3)}</b><span>Your busiest hours</span></div>` : ''}</div>
+        <div class="when-head"><div><b>When they come by</b><span>Last 30 days, in your time zone</span></div>${views30 >= 5 ? `<div class="busy"><b>${part}, ${fmtHour(bestH)} to ${fmtHour(bestH + 3)}</b><span>Your busiest hours</span></div>` : ''}</div>
         <div class="heat">${grid.map((row, d) => `<span class="heat-d">${days[d]}</span>${row.map((n, hr) => {
           const lv = n === 0 ? 0 : Math.min(4, Math.ceil(n / max * 4));
           const isNow = d === today && hr === hourNow;
-          return `<i style="background:${isNow ? '#F2C14E' : shades[lv]}" data-tip="${days[d]} ${fmtHour(hr)}${isNow ? ', right now' : ''} — ${plural(n, 'visit')}"></i>`;
+          return `<i style="background:${isNow ? '#F2C14E' : shades[lv]}" data-tip="${days[d]} ${fmtHour(hr)}${isNow ? ', right now' : ''}: ${plural(n, 'view')}"></i>`;
         }).join('')}`).join('')}</div>
         <div class="heat-x"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
         <p class="t-meta">The honey square is this hour. Post new things just before the dark ones.</p>
       </section>
-      <section class="month t-meta tnum">bento.cat/${esc(box.handle)} had ${times.length.toLocaleString('en-GB')} individual ${times.length === 1 ? 'visit' : 'visits'} recorded in the last 30 days. Visit times and visitor profiles include only visitors who opt in.</section>`;
+      <section class="month t-meta tnum">bento.cat/${esc(box.handle)} had ${plural(views30, 'page view')} in the last 30 days. Names and faces show only people signed in with a box who share their visits.</section>`;
     Cat.flash('wide', 1800);
   }
 
@@ -1527,6 +1527,11 @@ export function EditorView(app, box, opts = {}) {
         <input type="checkbox" role="switch" data-set="explore" aria-describedby="explore-hint" ${box.showInExplore !== false ? 'checked' : ''}>
       </label>
       <p class="t-meta" id="explore-hint">Help people find your box in Explore. Your link stays public when this is off.</p>
+      <label class="settings-toggle">
+        <span>Show my box when I visit</span>
+        <input type="checkbox" role="switch" data-set="share-visits" aria-describedby="share-visits-hint" ${box.shareVisits !== false ? 'checked' : ''}>
+      </label>
+      <p class="t-meta" id="share-visits-hint">People whose boxes you open see your name, photo and link under Visits. Turning it off also removes you from their past visitors.</p>
       <hr>
       <button class="menu-i" data-set="export">${I.download()}<span>Download your data</span></button>
       <div class="danger">
@@ -1540,6 +1545,10 @@ export function EditorView(app, box, opts = {}) {
     const inp = pop.querySelector('.handle-in input'), msg = pop.querySelector('.hs-msg'), dot = pop.querySelector('.hs'), btn = pop.querySelector('[data-set="handle"]');
     pop.querySelector('[data-set="explore"]').addEventListener('change', e => {
       commit(b => { b.showInExplore = e.target.checked; }, { animate: false });
+    });
+    pop.querySelector('[data-set="share-visits"]').addEventListener('change', e => {
+      commit(b => { b.shareVisits = e.target.checked; }, { animate: false });
+      toast(e.target.checked ? 'Boxes you visit can see you came by.' : 'You visit quietly now. Your past visits are being removed.');
     });
     let ticket = 0, timer;
     const check = async () => {
@@ -1633,7 +1642,6 @@ export function EditorView(app, box, opts = {}) {
       <button class="menu-i" data-m="settings">Page settings</button>
       ${box.onboarding && S.clHidden ? '<button class="menu-i" data-m="checklist">Show the checklist</button>' : ''}
       <a class="menu-i" href="/explore">Explore boxes</a>
-      <button class="menu-i" data-m="privacy">Privacy settings</button>
       <hr>
       <button class="menu-i" data-m="logout">Log out</button>
     </div>`, anchor, { align: 'right', cls: 'pop-menu' });
@@ -1642,7 +1650,6 @@ export function EditorView(app, box, opts = {}) {
       if (e.target.closest('a')) { Pop.close(); return; }
       if (!b) return;
       if (b.dataset.m === 'settings') { Pop.close(); openSettings($('#edMe', app)); }
-      if (b.dataset.m === 'privacy') { Pop.close(); VisitConsent.edit(); }
       if (b.dataset.m === 'checklist') { Pop.close(); S.clHidden = false; syncChecklist(); }
       if (b.dataset.m === 'logout') {
         Pop.close();

@@ -9,6 +9,7 @@ import { VISIT_RETENTION } from './retention';
 const MIN = 60 * 1000;
 
 const VISIT_GAP = 30 * 60 * 1000;
+const HOUR = 60 * MIN;
 
 // Page requests count without a visitor key, identity lookup or individual row.
 export const pageView = mutation({
@@ -19,6 +20,11 @@ export const pageView = mutation({
     const views = await ctx.db.query('views').withIndex('by_box', q => q.eq('boxId', boxId)).unique();
     if (views) await ctx.db.patch(views._id, { count: views.count + 1 });
     else await ctx.db.insert('views', { boxId, count: 1 });
+    // The same view in this hour's bucket: a count, with nothing about who.
+    const hour = Math.floor(Date.now() / HOUR) * HOUR;
+    const bucket = await ctx.db.query('viewHours').withIndex('by_box_hour', q => q.eq('boxId', boxId).eq('hour', hour)).unique();
+    if (bucket) await ctx.db.patch(bucket._id, { count: bucket.count + 1 });
+    else await ctx.db.insert('viewHours', { boxId, hour, count: 1 });
   },
 });
 
@@ -92,23 +98,23 @@ export const refreshBox = mutation({
   },
 });
 
-// Explicit consent is required even for callers using an older frontend.
-// Counted at most once per key every half hour; owners don't count.
+// A signed-in person with a box shows up in the owner's visitors, unless they turned
+// that off in their page settings. Anonymous views are counted by pageView only.
+// Counted at most once per viewer every half hour; owners don't count.
 export const visit = mutation({
-  args: { boxId: v.id('boxes'), visitorKey: v.string(), consent: v.literal(true) },
-  handler: async (ctx, { boxId, visitorKey }) => {
-    key(visitorKey);
-    if (await ctx.db.query('revokedVisitKeys').withIndex('by_key', q => q.eq('visitorKey', visitorKey)).first()) return;
-    const box = await ctx.db.get(boxId);
-    if (!box) return;
-    const now = Date.now();
+  args: { boxId: v.id('boxes') },
+  handler: async (ctx, { boxId }) => {
     const user = await currentUser(ctx);
-    if (user && box.ownerId === user._id) return;
-    const recent = await ctx.db.query('visits').withIndex('by_box_visitor', q => q.eq('boxId', boxId).eq('visitorKey', key(visitorKey)).gt('at', now - VISIT_GAP)).first();
+    if (!user) return;
+    const box = await ctx.db.get(boxId);
+    if (!box || box.ownerId === user._id) return;
+    const viewerBox = await boxOfUser(ctx, user._id);
+    if (!viewerBox || viewerBox.shareVisits === false) return;
+    const now = Date.now();
+    const recent = await ctx.db.query('visits').withIndex('by_box_viewer', q => q.eq('boxId', boxId).eq('viewerBoxId', viewerBox._id).gt('at', now - VISIT_GAP)).first();
     if (recent) return;
     await limit(ctx, `visit:${boxId}`, 1000, 10 * MIN);
-    const viewerBox = user ? await boxOfUser(ctx, user._id) : null;
-    await ctx.db.insert('visits', { boxId, visitorKey, viewerBoxId: viewerBox?._id, at: now });
+    await ctx.db.insert('visits', { boxId, viewerBoxId: viewerBox._id, at: now });
   },
 });
 
@@ -118,7 +124,8 @@ async function eraseVisits(ctx, visitorKey) {
   if (rows.length === 400) await ctx.scheduler.runAfter(0, internal.interactions.purgeVisitor, { visitorKey });
 }
 
-// Knowing the random key permits removal of only those visits, with no data returned.
+// Browsers that opted in under the earlier system can still erase what was recorded
+// under their key. Knowing the key permits removal of only those visits, with no data returned.
 export const forgetVisits = mutation({
   args: { visitorKey: v.string() },
   handler: async (ctx, { visitorKey }) => {

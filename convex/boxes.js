@@ -72,6 +72,7 @@ export const mine = query({
       onboarding: !!box.onboarding,
       shared: !!box.shared,
       showInExplore: box.showInExplore !== false,
+      shareVisits: box.shareVisits !== false,
       suggestions: box.suggestions ?? [],
       revision: box.revision ?? 0,
       lastSaveId: box.lastSaveId ?? null,
@@ -141,6 +142,9 @@ export const save = mutation({
     const revision = expectedRevision + 1, updatedAt = Date.now();
     await syncReferences(ctx, user._id, { ...box, ...patch });
     await ctx.db.patch(box._id, { ...patch, revision, lastSaveId: saveId, updatedAt });
+    // Turning off visit sharing also takes this box out of everyone's past visitors.
+    if (patch.shareVisits === false && box.shareVisits !== false)
+      await ctx.scheduler.runAfter(0, internal.accounts.purgeViewerVisits, { boxId: box._id });
     // Seed counters for new purr tiles so visitor purrs have something to add to.
     // They start at zero: only visitors' purrs count, never a number the editor sends.
     for (const t of patch.tiles ?? []) {
@@ -218,6 +222,7 @@ const PURGE = [
   ['subscribers', 'by_box_tile_email'],
   ['visits', 'by_box_at'],
   ['views', 'by_box'],
+  ['viewHours', 'by_box_hour'],
 ];
 
 // Clears related rows a batch at a time, then calls itself until nothing is left.

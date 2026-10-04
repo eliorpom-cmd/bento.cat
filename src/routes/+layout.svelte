@@ -7,10 +7,10 @@
 	import { page } from '$app/state';
 	import { beforeNavigate } from '$app/navigation';
 	import { startAuth } from '#lib/auth.svelte.js';
-	import { watch } from '#lib/api.js';
+	import { mutation, watch } from '#lib/api.js';
 	import { initEngine, leavePage } from '#lib/engine/init.js';
 	import { setAssets } from '#lib/engine/data.js';
-	import PrivacyChoices from '#lib/components/PrivacyChoices.svelte';
+	import { clearOptInLeftovers } from '#lib/visit-consent.js';
 
 	let { children } = $props();
 
@@ -21,6 +21,7 @@
 	}
 
 	onMount(() => {
+		void clearOptInLeftovers(key => mutation('interactions:forgetVisits', { visitorKey: key }));
 		return watch('files:assets', {}, setAssets, () => {});
 	});
 
@@ -36,4 +37,3 @@
 {@render children()}
 <div id="layer"></div>
 <div id="toasts" aria-live="polite"></div>
-<PrivacyChoices />

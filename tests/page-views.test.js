@@ -30,39 +30,56 @@ describe('anonymous page views', () => {
     expect(await t.query(api.stats.visits)).toBeNull();
   });
 
-  it('keeps opt-in visits and withdrawal separate from page-view totals', async () => {
+  it('counts views per hour for the chart without anything about who', async () => {
+    const { t, owner, box } = await setup();
+    await t.mutation(api.interactions.pageView, { boxId: box._id });
+    await t.mutation(api.interactions.pageView, { boxId: box._id });
+    const hours = await rows(t, 'viewHours');
+    expect(hours).toHaveLength(1);
+    expect(Object.keys(hours[0]).sort()).toEqual(['_creationTime', '_id', 'boxId', 'count', 'hour']);
+    expect(hours[0].hour % 3_600_000).toBe(0);
+    expect((await owner.query(api.stats.visits)).hours).toEqual([[hours[0].hour, 2]]);
+  });
+
+  it('records no visit for anonymous visitors or signed-in people without a box', async () => {
     const { t, box } = await setup();
-    await t.mutation(api.interactions.pageView, { boxId: box._id });
-    await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
-    await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
-    expect((await rows(t, 'views'))[0].count).toBe(1);
-    expect(await rows(t, 'visits')).toHaveLength(1);
-    await t.mutation(api.interactions.forgetVisits, { visitorKey: 'visitor-key' });
+    await t.mutation(api.interactions.visit, { boxId: box._id });
+    const boxless = t.withIdentity({ subject: 'boxless', issuer: 'https://clerk.example', tokenIdentifier: 'https://clerk.example|boxless' });
+    await boxless.mutation(api.users.store);
+    await boxless.mutation(api.interactions.visit, { boxId: box._id });
     expect(await rows(t, 'visits')).toEqual([]);
-    expect((await rows(t, 'views'))[0].count).toBe(1);
-    await t.mutation(api.interactions.pageView, { boxId: box._id });
-    expect((await rows(t, 'views'))[0].count).toBe(2);
   });
 
   it('never overwrites anonymous totals when backfilling old visits', async () => {
     const { t, box } = await setup();
-    await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
+    await t.run(ctx => ctx.db.insert('visits', { boxId: box._id, visitorKey: 'legacy-visitor-key', at: Date.now() }));
     await t.mutation(internal.boxes.backfillViews);
     await t.mutation(api.interactions.pageView, { boxId: box._id });
     await t.mutation(internal.boxes.backfillViews);
     expect((await rows(t, 'views'))[0].count).toBe(2);
   });
 
-  it('reveals a signed-in visitor’s box only after they opt in', async () => {
+  it('shows a signed-in visitor’s box until they turn sharing off, which also removes past visits', async () => {
+    vi.useFakeTimers();
     const { t, owner, box } = await setup();
     const visitor = t.withIdentity({ subject: 'visitor', issuer: 'https://clerk.example', tokenIdentifier: 'https://clerk.example|visitor' });
     await visitor.mutation(api.users.store);
     await visitor.mutation(api.boxes.claim, { handle: 'visitor' });
-    await visitor.mutation(api.interactions.pageView, { boxId: box._id });
-    expect(await owner.query(api.stats.visits)).toMatchObject({ pageViews: 1, times: [], viewers: [], signedInCount: 0 });
-    await expect(visitor.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: false })).rejects.toThrow();
-    await visitor.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
-    expect(await owner.query(api.stats.visits)).toMatchObject({ pageViews: 1, viewers: [{ handle: 'visitor' }], signedInCount: 1 });
+    await visitor.mutation(api.interactions.visit, { boxId: box._id });
+    await visitor.mutation(api.interactions.visit, { boxId: box._id });
+    expect(await rows(t, 'visits')).toHaveLength(1);
+    expect(await owner.query(api.stats.visits)).toMatchObject({ viewers: [{ handle: 'visitor' }], signedInCount: 1 });
+    // The owner never shows up in their own visitors.
+    await owner.mutation(api.interactions.visit, { boxId: box._id });
+    expect(await rows(t, 'visits')).toHaveLength(1);
+    expect((await visitor.query(api.boxes.mine)).shareVisits).toBe(true);
+    await visitor.mutation(api.boxes.save, { data: { shareVisits: false }, expectedRevision: 0, saveId: 'quiet' });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(await owner.query(api.stats.visits)).toMatchObject({ viewers: [], signedInCount: 0 });
+    await visitor.mutation(api.interactions.visit, { boxId: box._id });
+    expect(await rows(t, 'visits')).toEqual([]);
+    expect((await visitor.query(api.boxes.mine)).shareVisits).toBe(false);
+    vi.useRealTimers();
   });
 
   it('ignores deleted boxes and bounds abuse without keeping visitor data', async () => {

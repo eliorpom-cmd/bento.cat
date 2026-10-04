@@ -7,7 +7,6 @@
 	import { auth, whenAuthed } from '#lib/auth.svelte.js';
 	import { clerkMessage, resendCode, sendCode, verifyCode, withGoogle } from '#lib/signin.js';
 	import { Cat, I, catLogo, fmtSec, handleCheck, toast } from '#lib/engine/util.js';
-	import { VisitConsent } from '#lib/visit-consent.js';
 
 	const CLAIM_KEY = 'bento.cat/claim';
 	const DIGITS = 6;
@@ -288,5 +287,5 @@
 	</div>
 	<!-- Clerk's bot check renders here during sign-up. -->
 	<div id="clerk-captcha"></div>
-	<p class="auth-foot">By signing in you agree to our <a href="/terms">terms</a> and to be nice to the cats. Read our <a href="/privacy">privacy policy</a> or change your <button onclick={() => VisitConsent.edit()}>privacy settings</button>.</p>
+	<p class="auth-foot">By signing in you agree to our <a href="/terms">terms</a> and to be nice to the cats. Read our <a href="/privacy">privacy policy</a>.</p>
 </div>

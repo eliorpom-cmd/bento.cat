@@ -69,6 +69,8 @@ export default defineSchema({
     lastSaveId: v.optional(v.string()),
     // Last time a visit looked for stale GitHub graphs to refresh.
     ghCheckedAt: v.optional(v.number()),
+    // false once the owner turns off showing their box to the boxes they visit.
+    shareVisits: v.optional(v.boolean()),
   })
     .index('by_handle', ['handle'])
     .index('by_owner', ['ownerId'])
@@ -104,9 +106,11 @@ export default defineSchema({
     .index('by_box_tile_email', ['boxId', 'tileId', 'email'])
     .index('by_box_visitor', ['boxId', 'visitorKey']),
 
+  // Visits by signed-in people with a box, so owners can see who came by. Rows from
+  // the earlier opt-in system carry a visitorKey instead and expire like the rest.
   visits: defineTable({
     boxId: v.id('boxes'),
-    visitorKey: v.string(),
+    visitorKey: v.optional(v.string()),
     viewerBoxId: v.optional(v.id('boxes')),
     at: v.number(),
   })
@@ -114,13 +118,24 @@ export default defineSchema({
     .index('by_box_visitor', ['boxId', 'visitorKey', 'at'])
     .index('by_at', ['at'])
     .index('by_visitor', ['visitorKey'])
-    .index('by_viewer', ['viewerBoxId']),
+    .index('by_viewer', ['viewerBoxId'])
+    .index('by_box_viewer', ['boxId', 'viewerBoxId', 'at']),
 
   // Withdrawal also blocks late requests from other tabs using the old key.
   revokedVisitKeys: defineTable({
     visitorKey: v.string(),
     expiresAt: v.number(),
   }).index('by_key', ['visitorKey']).index('by_expiry', ['expiresAt']),
+
+  // Anonymous page views per box and hour, for the owner's "when they come by" chart.
+  // Only counts, never who; kept for 30 days.
+  viewHours: defineTable({
+    boxId: v.id('boxes'),
+    hour: v.number(),
+    count: v.number(),
+  })
+    .index('by_box_hour', ['boxId', 'hour'])
+    .index('by_hour', ['hour']),
 
   // Running visit total per box, kept apart from `visits` so explore can rank by it.
   views: defineTable({

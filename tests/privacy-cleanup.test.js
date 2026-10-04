@@ -119,17 +119,21 @@ describe('deletion cleanup', () => {
   });
 });
 
-describe('visit retention and consent', () => {
-  it('requires consent, deduplicates visits, and ignores the owner', async () => {
-    const t = convexTest(schema, modules), a = await owner(t, 'owner');
+describe('visit retention', () => {
+  it('records a member’s visit once per half hour, ignores the owner, and stores no browser key', async () => {
+    const t = convexTest(schema, modules), a = await owner(t, 'owner'), b = await owner(t, 'member');
     const box = await a.query(api.boxes.mine);
-    await expect(t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key' })).rejects.toThrow();
-    await expect(t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: false })).rejects.toThrow();
-    await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
-    await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'visitor-key', consent: true });
-    await a.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'owner-key', consent: true });
-    expect(await rows(t, 'visits')).toHaveLength(1);
+    await b.mutation(api.interactions.visit, { boxId: box._id });
+    await b.mutation(api.interactions.visit, { boxId: box._id });
+    await a.mutation(api.interactions.visit, { boxId: box._id });
+    const visits = await rows(t, 'visits');
+    expect(visits).toHaveLength(1);
+    expect(visits[0].visitorKey).toBeUndefined();
+    expect(visits[0].viewerBoxId).toBe((await b.query(api.boxes.mine))._id);
     expect(await rows(t, 'views')).toEqual([]);
+    vi.advanceTimersByTime(31 * 60 * 1000);
+    await b.mutation(api.interactions.visit, { boxId: box._id });
+    expect(await rows(t, 'visits')).toHaveLength(2);
   });
 
   it('expires visits in batches at 30 days and stale rate limits without losing aggregates', async () => {
@@ -139,6 +143,8 @@ describe('visit retention and consent', () => {
       for (let i = 0; i < 405; i++) await ctx.db.insert('visits', { boxId: box._id, visitorKey: 'old-key-123', at: boundary - i });
       await ctx.db.insert('visits', { boxId: box._id, visitorKey: 'recent-key', at: boundary + 1 });
       await ctx.db.insert('views', { boxId: box._id, count: 406 });
+      await ctx.db.insert('viewHours', { boxId: box._id, hour: boundary - 3_600_000, count: 3 });
+      await ctx.db.insert('viewHours', { boxId: box._id, hour: boundary + 3_600_000, count: 2 });
       await ctx.db.insert('limits', { key: 'expired-visitor-key', windowStart: boundary, count: 5 });
       await ctx.db.insert('limits', { key: 'active-key', windowStart: Date.now(), count: 1 });
     });
@@ -147,10 +153,11 @@ describe('visit retention and consent', () => {
     expect(await rows(t, 'visits')).toHaveLength(1);
     expect((await rows(t, 'visits'))[0].at).toBe(boundary + 1);
     expect((await rows(t, 'views'))[0].count).toBe(406);
+    expect((await rows(t, 'viewHours')).map(r => r.count)).toEqual([2]);
     expect((await rows(t, 'limits')).map(r => r.key)).toEqual(['active-key']);
   });
 
-  it('withdrawal removes only visits under that key, including multiple batches', async () => {
+  it('erasing an old opt-in key removes only visits under that key, including multiple batches', async () => {
     const t = convexTest(schema, modules), a = await owner(t, 'owner');
     const box = await a.query(api.boxes.mine);
     await t.run(async ctx => {
@@ -159,7 +166,6 @@ describe('visit retention and consent', () => {
     });
     await t.mutation(api.interactions.forgetVisits, { visitorKey: 'withdrawn-key' });
     await drain(t);
-    await t.mutation(api.interactions.visit, { boxId: box._id, visitorKey: 'withdrawn-key', consent: true });
     expect((await rows(t, 'visits')).map(r => r.visitorKey)).toEqual(['other-key']);
     expect(await rows(t, 'revokedVisitKeys')).toHaveLength(1);
     vi.advanceTimersByTime(VISIT_RETENTION);
