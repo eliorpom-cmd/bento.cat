@@ -195,7 +195,12 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select:
 .preview { flex-shrink: 0; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
 .s-loaf .preview { width: 150px; }
 .s-tower .preview, .s-sprawl .preview { flex: 1; margin: 14px 0; }
-.preview.img { background-size: cover; background-position: center; }
+.preview.img { padding: 0; background: #F4F4F2; }
+.preview.img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Tall and large tiles show the whole picture at its own shape, and only crop when it's taller than the room. */
+.s-tower .preview.img, .s-sprawl .preview.img { flex: 0 1 auto; min-height: 0; margin-top: auto; }
+.s-tower .preview.img img, .s-sprawl .preview.img img { height: auto; min-height: 0; flex: 0 1 auto; }
+.s-tower .link-top:has(+ .preview.img), .s-sprawl .link-top:has(+ .preview.img) { margin-bottom: 14px; }
 .pv-label { font-size: 13px; line-height: 16px; font-feature-settings: "tnum"; }
 .pv-big { font-size: 52px; font-weight: 700; letter-spacing: -.04em; line-height: 48px; }
 .s-sprawl .pv-big { font-size: 104px; line-height: 92px; }
