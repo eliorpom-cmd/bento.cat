@@ -47,13 +47,16 @@
 {/if}
 
 <style>
-	.privacy-choices { position: fixed; bottom: 20px; left: 20px; z-index: 1100; width: min(432px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 24px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 8px 28px rgb(0 0 0 / 8%); }
-	h2 { margin: 0 0 14px; font-size: 20px; font-weight: 600; line-height: 26px; letter-spacing: -.02em; }
-	p { margin: 0 0 14px; font-size: 15px; line-height: 22px; color: var(--text2); }
-	.privacy-note { font-size: 14px; line-height: 20px; color: var(--muted); }
-	a { font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
-	.privacy-actions { display: flex; gap: 10px; margin-top: 18px; }
-	.privacy-actions button { flex: 1; padding: 0 10px; }
+	/* Bottom right: the owner's photo, name and bio live in the left column. */
+	.privacy-choices { position: fixed; bottom: 20px; right: 20px; z-index: 1100; width: min(380px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 8px 28px rgb(0 0 0 / 8%); }
+	h2 { margin: 0 0 8px; font-size: 17px; font-weight: 600; line-height: 22px; letter-spacing: -.02em; }
+	p { margin: 0 0 8px; font-size: 14px; line-height: 20px; color: var(--text2); }
+	.privacy-note { font-size: 13px; line-height: 18px; color: var(--muted); }
+	a { font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+	.privacy-actions { display: flex; gap: 8px; margin-top: 14px; }
+	.privacy-actions button { flex: 1; height: 40px; padding: 0 10px; }
 	.privacy-feedback { position: fixed; bottom: 12px; left: 12px; z-index: 1101; max-width: min(420px, calc(100vw - 24px)); padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-	@media (max-width: 480px) { .privacy-choices { left: 12px; bottom: 12px; width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 20px; } }
+	/* In the editor, sit above the dock. */
+	:global(body:has(.dock)) .privacy-choices { bottom: 96px; max-height: calc(100dvh - 116px); }
+	@media (max-width: 480px) { .privacy-choices { right: 12px; bottom: 12px; width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 16px; } }
 </style>
