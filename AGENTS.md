@@ -1,0 +1,3 @@
+- Before creating a new component, if it's not something really small, design it in the paper MCP first, if available. Make sure it fits with the rest of the designs.
+- Use bun.
+- I hate this character: the middle dot (U+00B7)

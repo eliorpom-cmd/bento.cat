@@ -1,0 +1,199 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { convexTest } from 'convex-test';
+import { createHmac } from 'node:crypto';
+import { api, internal } from '../convex/_generated/api.js';
+import schema from '../convex/schema.js';
+import { MAX_OWNER_BYTES, MAX_UPLOAD_BYTES, UNUSED_FILE_TTL } from '../convex/mediaPolicy.js';
+
+const modules = import.meta.glob('../convex/**/*.js');
+const identity = subject => ({ subject, issuer: 'https://clerk.example', tokenIdentifier: `https://clerk.example|${subject}`, email: `${subject}@example.com` });
+async function owner(t, subject = 'user_owner') {
+  const authed = t.withIdentity(identity(subject));
+  await authed.mutation(api.users.store);
+  await authed.mutation(api.boxes.claim, { handle: subject.replace('user_', '') });
+  return authed;
+}
+const save = (t, data, expectedRevision = 0, saveId = crypto.randomUUID()) => t.mutation(api.boxes.save, { data, expectedRevision, saveId });
+async function file(t, bytes = 'photo') {
+  const blob = new Blob([bytes], { type: 'image/png' });
+  const uploadId = await t.mutation(internal.files.reserve, { bytes: blob.size, contentType: blob.type });
+  const storageId = await t.run(ctx => ctx.storage.store(blob));
+  const url = await t.mutation(internal.files.attach, { uploadId, storageId });
+  return { uploadId, storageId, url };
+}
+
+beforeEach(() => { vi.useFakeTimers(); vi.stubEnv('CLERK_SECRET_KEY', 'sk_test_fake'); });
+afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+describe('profile saves', () => {
+  it('rejects stale tabs and makes a lost-response retry idempotent', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    await expect(save(a, { name: 'First' }, 0, 'request-1')).resolves.toMatchObject({ revision: 1 });
+    await expect(save(a, { name: 'First' }, 0, 'request-1')).resolves.toMatchObject({ revision: 1 });
+    await expect(save(a, { name: 'Stale' }, 0, 'request-2')).rejects.toThrow();
+    expect((await a.query(api.boxes.mine)).name).toBe('First');
+  });
+  it('requires authentication and rejects duplicate tile ids without changing the box', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    await expect(save(t, { name: 'No' })).rejects.toThrow();
+    await expect(save(a, { tiles: [{ id: 'same', type: 'note' }, { id: 'same', type: 'photo' }] })).rejects.toThrow();
+    expect((await a.query(api.boxes.mine)).revision).toBe(0);
+  });
+});
+
+describe('media storage', () => {
+  it('rejects oversized and active content before reserving storage', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    for (const [bytes, contentType] of [[MAX_UPLOAD_BYTES + 1, 'image/png'], [10, 'image/svg+xml'], [0, 'video/mp4']])
+      await expect(a.mutation(internal.files.reserve, { bytes, contentType })).rejects.toThrow();
+    expect(await t.run(ctx => ctx.db.query('uploads').collect())).toEqual([]);
+  });
+  it('counts concurrent reservations against the owner quota', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    const me = await t.run(ctx => ctx.db.query('users').first());
+    await t.run(ctx => ctx.db.insert('uploads', { ownerId: me._id, bytes: MAX_OWNER_BYTES - 10, contentType: 'image/png', referenced: true }));
+    await a.mutation(internal.files.reserve, { bytes: 6, contentType: 'image/png' });
+    await expect(a.mutation(internal.files.reserve, { bytes: 6, contentType: 'image/png' })).rejects.toThrow();
+  });
+  it('does not let another owner attach or save someone else’s media', async () => {
+    const t = convexTest(schema, modules), a = await owner(t), b = await owner(t, 'user_other');
+    const f = await file(a);
+    await expect(b.mutation(internal.files.attach, { uploadId: f.uploadId, storageId: f.storageId })).rejects.toThrow();
+    await expect(save(b, { avatar: f.url })).rejects.toThrow();
+    expect(await t.run(ctx => ctx.db.system.get(f.storageId))).not.toBeNull();
+  });
+  it('keeps referenced files, allows undo, and deletes removed files after the grace period', async () => {
+    const t = convexTest(schema, modules), a = await owner(t), f = await file(a);
+    await save(a, { avatar: f.url });
+    vi.advanceTimersByTime(UNUSED_FILE_TTL);
+    await t.finishInProgressScheduledFunctions();
+    expect(await t.run(ctx => ctx.db.system.get(f.storageId))).not.toBeNull();
+    await save(a, { avatar: null }, 1);
+    await save(a, { avatar: f.url }, 2);
+    vi.advanceTimersByTime(UNUSED_FILE_TTL);
+    await t.finishInProgressScheduledFunctions();
+    expect(await t.run(ctx => ctx.db.system.get(f.storageId))).not.toBeNull();
+    await save(a, { avatar: null }, 3);
+    vi.advanceTimersByTime(UNUSED_FILE_TTL);
+    await t.finishInProgressScheduledFunctions();
+    expect(await t.run(ctx => ctx.db.system.get(f.storageId))).toBeNull();
+  });
+  it('rejects unauthenticated HTTP uploads and supplies CORS on failures', async () => {
+    const t = convexTest(schema, modules);
+    const response = await t.fetch('/upload', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: 'photo' });
+    expect(response.status).toBe(401);
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(await t.run(ctx => ctx.db.query('uploads').collect())).toHaveLength(0);
+  });
+  it('uploads through the authenticated HTTP path and enforces size and type limits there', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    const response = await a.fetch('/upload', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: 'photo' });
+    expect(response.status).toBe(200);
+    const { src } = await response.json();
+    const row = await t.run(ctx => ctx.db.query('uploads').first());
+    expect(row.url).toBe(src);
+    expect(row.bytes).toBe(5);
+    const oversized = await a.fetch('/upload', { method: 'POST', headers: { 'Content-Type': 'image/png', 'Content-Length': String(MAX_UPLOAD_BYTES + 1) }, body: 'photo' });
+    expect(oversized.status).toBe(413);
+    const svg = await a.fetch('/upload', { method: 'POST', headers: { 'Content-Type': 'image/svg+xml' }, body: '<svg/>' });
+    expect(svg.status).toBe(415);
+    expect(await t.run(ctx => ctx.db.query('uploads').collect())).toHaveLength(1);
+  });
+});
+
+describe('account deletion', () => {
+  it('keeps the account intact when Clerk deletion is not configured', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    vi.stubEnv('CLERK_SECRET_KEY', '');
+    await expect(a.mutation(api.boxes.remove)).rejects.toThrow();
+    expect((await a.query(api.boxes.mine)).handle).toBe('owner');
+  });
+  it('purges owned media and visitor rows without touching another account or shared assets', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })));
+    const t = convexTest(schema, modules), a = await owner(t), b = await owner(t, 'user_other');
+    const f = await file(a), other = await file(b);
+    const box = await a.query(api.boxes.mine);
+    await t.run(async ctx => {
+      await ctx.db.insert('subscribers', { boxId: box._id, tileId: 's', email: 'visitor@example.com', visitorKey: 'visitor-key' });
+      await ctx.db.insert('views', { boxId: box._id, count: 2 });
+    });
+    await a.mutation(api.boxes.remove);
+    vi.advanceTimersByTime(0);
+    await t.finishInProgressScheduledFunctions();
+    vi.advanceTimersByTime(0);
+    await t.finishInProgressScheduledFunctions();
+    expect(await t.run(ctx => ctx.db.system.get(f.storageId))).toBeNull();
+    expect(await t.run(ctx => ctx.db.system.get(other.storageId))).not.toBeNull();
+    expect(await t.run(ctx => ctx.db.query('subscribers').collect())).toEqual([]);
+    expect(await a.mutation(api.users.store)).toBeNull();
+    expect((await b.query(api.boxes.mine)).handle).toBe('other');
+  });
+  it('retries Clerk failures and treats an already deleted Clerk user as success', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 503 })).mockResolvedValue(new Response('{}', { status: 404 }));
+    vi.stubGlobal('fetch', fetch);
+    const t = convexTest(schema, modules), a = await owner(t);
+    await a.mutation(api.boxes.remove);
+    vi.advanceTimersByTime(0); await t.finishInProgressScheduledFunctions();
+    vi.advanceTimersByTime(0); await t.finishInProgressScheduledFunctions();
+    expect((await t.run(ctx => ctx.db.query('deletedUsers').first())).clerkDeleted).toBe(false);
+    vi.advanceTimersByTime(60_000); await t.finishInProgressScheduledFunctions();
+    vi.advanceTimersByTime(0); await t.finishInProgressScheduledFunctions();
+    expect((await t.run(ctx => ctx.db.query('deletedUsers').first())).clerkDeleted).toBe(true);
+  });
+  it('rejects unsigned Clerk webhooks', async () => {
+    vi.stubEnv('CLERK_WEBHOOK_SIGNING_SECRET', 'whsec_ZmFrZQ==');
+    const t = convexTest(schema, modules), a = await owner(t);
+    const response = await t.fetch('/clerk-webhook', { method: 'POST', body: JSON.stringify({ type: 'user.deleted', data: { id: 'user_owner' } }) });
+    expect(response.status).toBe(400);
+    expect(await a.query(api.boxes.mine)).not.toBeNull();
+  });
+  it('verifies signed dashboard deletions and handles repeated deliveries idempotently', async () => {
+    const secret = Buffer.from('a-real-test-signing-secret').toString('base64');
+    vi.stubEnv('CLERK_WEBHOOK_SIGNING_SECRET', `whsec_${secret}`);
+    const t = convexTest(schema, modules), a = await owner(t);
+    const body = JSON.stringify({ type: 'user.deleted', data: { id: 'user_owner', object: 'user', deleted: true } });
+    const timestamp = String(Math.floor(Date.now() / 1000)), messageId = 'msg_test';
+    const signature = createHmac('sha256', Buffer.from(secret, 'base64')).update(`${messageId}.${timestamp}.${body}`).digest('base64');
+    const request = { method: 'POST', body, headers: { 'svix-id': messageId, 'svix-timestamp': timestamp, 'svix-signature': `v1,${signature}` } };
+    expect((await t.fetch('/clerk-webhook', request)).status).toBe(200);
+    expect((await t.fetch('/clerk-webhook', request)).status).toBe(200);
+    expect(await a.query(api.boxes.mine)).toBeNull();
+    expect(await a.mutation(api.users.store)).toBeNull();
+    expect(await t.run(ctx => ctx.db.query('deletedUsers').collect())).toHaveLength(1);
+  });
+});
+
+describe('moderation and retention', () => {
+  it('allows only the owner to list or remove visitor entries', async () => {
+    const t = convexTest(schema, modules), a = await owner(t), b = await owner(t, 'user_other');
+    const box = await a.query(api.boxes.mine);
+    const id = await t.run(ctx => ctx.db.insert('scribbles', { boxId: box._id, tileId: 'guestbook', d: 'M1 1 L2 2', name: 'Visitor' }));
+    expect((await a.query(api.moderation.scribbles, { paginationOpts: { numItems: 10, cursor: null } })).page).toHaveLength(1);
+    expect((await b.query(api.moderation.scribbles, { paginationOpts: { numItems: 10, cursor: null } })).page).toHaveLength(0);
+    await expect(b.mutation(api.moderation.removeScribble, { id })).rejects.toThrow();
+    await a.mutation(api.moderation.removeScribble, { id });
+    expect(await t.run(ctx => ctx.db.get(id))).toBeNull();
+  });
+  it('removes only the matching browser’s subscription', async () => {
+    const t = convexTest(schema, modules), a = await owner(t), box = await a.query(api.boxes.mine);
+    await t.run(async ctx => {
+      for (const visitorKey of ['visitor-one', 'visitor-two']) await ctx.db.insert('subscribers', { boxId: box._id, tileId: 's', email: `${visitorKey}@example.com`, visitorKey });
+    });
+    await t.mutation(api.moderation.unsubscribe, { boxId: box._id, tileId: 's', visitorKey: 'visitor-one' });
+    expect((await t.run(ctx => ctx.db.query('subscribers').collect())).map(row => row.visitorKey)).toEqual(['visitor-two']);
+  });
+  it('expires raw visits and old rate limits while keeping aggregate views', async () => {
+    const t = convexTest(schema, modules), a = await owner(t), box = await a.query(api.boxes.mine);
+    await t.run(async ctx => {
+      await ctx.db.insert('visits', { boxId: box._id, visitorKey: 'old-visitor', at: Date.now() - 31 * 86400000 });
+      await ctx.db.insert('visits', { boxId: box._id, visitorKey: 'new-visitor', at: Date.now() });
+      await ctx.db.insert('limits', { key: 'expired', windowStart: Date.now() - 2 * 86400000, count: 1 });
+      await ctx.db.insert('limits', { key: 'active', windowStart: Date.now(), count: 1 });
+      await ctx.db.insert('views', { boxId: box._id, count: 2 });
+    });
+    await t.mutation(internal.retention.cleanup);
+    expect((await t.run(ctx => ctx.db.query('visits').collect())).map(row => row.visitorKey)).toEqual(['new-visitor']);
+    expect((await t.run(ctx => ctx.db.query('limits').collect())).map(row => row.key)).toEqual(['active']);
+    expect((await t.run(ctx => ctx.db.query('views').first())).count).toBe(2);
+  });
+});

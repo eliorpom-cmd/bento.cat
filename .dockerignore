@@ -1,0 +1,12 @@
+.git
+.github
+.clerk
+.env
+.env.*
+node_modules
+.svelte-kit
+build
+design
+tests
+SPEC.md
+.DS_Store

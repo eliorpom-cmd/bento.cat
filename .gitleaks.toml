@@ -1,0 +1,19 @@
+title = "bento.cat secret scanning"
+
+[extend]
+useDefault = true
+
+# These are exact, intentionally fake fixtures, not blanket test exclusions.
+[[allowlists]]
+description = "CI Clerk publishable key for clerk.example.com"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^\.github/workflows/checks\.yml$''']
+regexes = ['''^pk_test_Y2xlcmsuZXhhbXBsZS5jb20k$''']
+
+[[allowlists]]
+description = "Fake signing secret for the unsigned-webhook test"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^tests/backend\.test\.js$''']
+regexes = ['''^whsec_ZmFrZQ==$''']
