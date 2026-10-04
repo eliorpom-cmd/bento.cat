@@ -71,6 +71,7 @@ export const mine = query({
       email: user.email ?? null,
       onboarding: !!box.onboarding,
       shared: !!box.shared,
+      showInExplore: box.showInExplore !== false,
       suggestions: box.suggestions ?? [],
       revision: box.revision ?? 0,
       lastSaveId: box.lastSaveId ?? null,
@@ -170,7 +171,7 @@ export const explore = query({
   args: {},
   handler: async ctx => {
     const picked = new Map();
-    const add = b => b && b.tiles.length > 0 && picked.size < EXPLORE && picked.set(b._id, b);
+    const add = b => b && b.showInExplore !== false && b.tiles.length > 0 && picked.size < EXPLORE && picked.set(b._id, b);
     for (const row of await ctx.db.query('views').withIndex('by_count').order('desc').take(EXPLORE * 3)) add(await ctx.db.get(row.boxId));
     if (picked.size < EXPLORE) {
       for (const b of await ctx.db.query('boxes').withIndex('by_updated').order('desc').take(60)) if (!picked.has(b._id)) add(b);
@@ -179,7 +180,7 @@ export const explore = query({
   },
 });
 
-// One-off: builds `views` from the visits recorded before it existed. Safe to run twice.
+// Seed missing totals from older visits without overwriting anonymous page views.
 export const backfillViews = internalMutation({
   args: {},
   handler: async ctx => {
@@ -187,8 +188,7 @@ export const backfillViews = internalMutation({
     for await (const r of ctx.db.query('visits')) totals.set(r.boxId, (totals.get(r.boxId) ?? 0) + 1);
     for (const [boxId, count] of totals) {
       const row = await ctx.db.query('views').withIndex('by_box', q => q.eq('boxId', boxId)).unique();
-      if (row) await ctx.db.patch(row._id, { count });
-      else await ctx.db.insert('views', { boxId, count });
+      if (!row) await ctx.db.insert('views', { boxId, count });
     }
     return totals.size;
   },

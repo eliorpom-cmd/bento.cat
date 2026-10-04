@@ -91,6 +91,24 @@ Tests use isolated Convex mocks and mocked Clerk requests. They do not upload to
 
 ## Hosting
 
+### Page views and optional visitor records
+
+Public box loads count on the server, including client-side navigation. The
+counter sends only the box ID to Convex and stores a running total per box. It
+does not use browser storage, visitor identifiers, account information, IP
+addresses or individual view timestamps. Data preloading is disabled so hovering
+links does not count; code still preloads on hover. HEAD requests and explicit
+prefetches are excluded. Counter failures do not prevent a box from loading.
+
+These are page views, not unique visitors: repeat loads, owners and automated
+requests can count. Existing totals include visits from the earlier opt-in
+system. Totals remain until the box is deleted and also rank Explore results.
+
+Individual visit times and visitor profiles remain opt-in, with the existing
+30-day retention and withdrawal cleanup. Recording or deleting an individual
+visit does not change anonymous totals. The owner sees both the total and the
+separate opt-in details under Visits.
+
 ### Automatic production deployment
 
 Pushes to `main` automatically deploy to [bento.cat](https://bento.cat) on PPH

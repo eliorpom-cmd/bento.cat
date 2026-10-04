@@ -4,7 +4,7 @@ import { createSaveQueue, draftJournal } from '../save-queue.js';
 import { VisitConsent } from '../visit-consent.js';
 import { hasCoords, zoomOf } from './map.js';
 import { AVATAR_SHAPES, DAY, sz } from './data.js';
-import { ALL_POSES, POSES, TINTS, TYPES, bg, corner, num, paintRange, serviceOf, sizeOf, tilesFor, titleOf } from './tiles.js';
+import { ALL_POSES, POSES, TINTS, TYPES, bg, corner, num, paintRange, serviceOf, sizeOf, tilesFor, tintOf, titleOf } from './tiles.js';
 import { $, $$, Cat, I, Pop, applyMarks, catLogo, clamp, esc, fmtHour, fmtSec, h, handleCheck, hash, hostOf, htmlText, looksLikeUrl, normUrl, pickFiles, platformOf, plural, poseForRatio, sanitize, toast, tzOffset, uid } from './util.js';
 
 /* The editor. Edit right on the page; controls appear beside the thing you touch. */
@@ -206,6 +206,7 @@ export function EditorView(app, box, opts = {}) {
   const payload = () => JSON.parse(JSON.stringify({
     name: box.name, bio: box.bio, avatar: box.avatar ?? null, avatarVideo: box.avatarVideo ?? null, avatarPos: box.avatarPos, avatarShape: box.avatarShape,
     tiles: box.tiles, mobile: box.mobile ? orderIdsOf(box, 'm') : undefined, suggestions: box.suggestions || [], onboarding: !!box.onboarding, shared: !!box.shared,
+    showInExplore: box.showInExplore !== false,
   }));
 
   function save() {
@@ -304,8 +305,8 @@ export function EditorView(app, box, opts = {}) {
       tools.push(`<button class="tb-b" data-tb="replace-before" data-tip="${t.before ? 'Replace before photo' : 'Add a before photo'}" aria-label="Replace before photo">${I.upload(t.before ? '#FFFFFF' : '#F2C14E')}</button>`);
       tools.push(`<button class="tb-b" data-tb="replace" data-tip="Replace after photo" aria-label="Replace after photo">${I.upload()}</button>`);
     }
+    if (t.type === 'note' || t.type === 'purr') tools.push(`<button class="tb-b" data-tb="tint" data-tip="Colour" aria-label="Colour"><span class="swatch" style="background:${TINTS[tintOf(t)].bg}"></span></button>`);
     if (t.type === 'note') {
-      tools.push(`<button class="tb-b" data-tb="tint" data-tip="Colour" aria-label="Colour"><span class="swatch" style="background:${TINTS[t.tint || 'curb'].bg}"></span></button>`);
       tools.push(`<button class="tb-b" data-tb="align" data-tip="Align" aria-label="Align">${I.align('#fff', 16, t.align || 'left')}</button>`);
     }
     if (t.type === 'sayname') {
@@ -400,7 +401,7 @@ export function EditorView(app, box, opts = {}) {
   }
 
   function openTintPop(t, anchor) {
-    const pop = Pop.open(`<div class="tints">${Object.entries(TINTS).map(([k, v]) => `<button class="tint-b ${(t.tint || 'curb') === k ? 'on' : ''}" data-tint="${k}" data-tip="${v.name}" style="background:${v.bg}" aria-label="${v.name}"></button>`).join('')}</div>`, anchor, { cls: 'pop-tints' });
+    const pop = Pop.open(`<div class="tints">${Object.entries(TINTS).map(([k, v]) => `<button class="tint-b ${tintOf(t) === k ? 'on' : ''}" data-tint="${k}" data-tip="${v.name}" style="background:${v.bg}" aria-label="${v.name}"></button>`).join('')}</div>`, anchor, { cls: 'pop-tints' });
     pop.addEventListener('click', ev => {
       const b = ev.target.closest('[data-tint]');
       if (!b) return;
@@ -1122,7 +1123,7 @@ export function EditorView(app, box, opts = {}) {
     closeRing(); Pop.close(); select(null);
     // Leave room for the labels that stick out to either side.
     x = innerWidth >= 520 ? clamp(x, 240, innerWidth - 250) : innerWidth / 2;
-    const ring = h(`<div class="ring" style="left:${x + scrollX}px;top:${y + scrollY}px">
+    const ring = h(`<div class="ring still" style="left:${x + scrollX}px;top:${y + scrollY}px">
       <div class="ring-band"></div>
       <svg class="ring-svg" viewBox="0 0 308 308"><circle cx="154" cy="154" r="108" fill="none" stroke="#E0E0DC" stroke-width="1.2" stroke-dasharray="3 5"/><path class="ring-arc" d="" fill="none" stroke="#161616" stroke-width="2.4" stroke-linecap="round"/></svg>
       ${ringButtons(ADD)}
@@ -1135,10 +1136,17 @@ export function EditorView(app, box, opts = {}) {
     else if (under > 0) scrollBy({ top: -under, behavior: 'smooth' });
     requestAnimationFrame(() => requestAnimationFrame(() => ring.classList.add('open')));
     const arc = ring.querySelector('.ring-arc');
-    ring.addEventListener('pointerover', e => {
+    const point = e => {
       const b = e.target.closest('.ring-b');
       arc.setAttribute('d', b ? arcPath(+b.dataset.a) : '');
-    });
+    };
+    ring.addEventListener('pointerover', e => { if (!ring.classList.contains('still')) point(e); });
+    // The buttons fly out under a cursor that hasn't moved. Only a real move lights them up.
+    const moved = e => {
+      if (!e.movementX && !e.movementY) return;
+      if (ring.classList.contains('still')) { ring.classList.remove('still'); point(e); }
+    };
+    document.addEventListener('pointermove', moved);
     ring.addEventListener('click', e => {
       const b = e.target.closest('.ring-b');
       if (b) { if (b.dataset.ring === 'more') flipRing(ring, true); else add(b.dataset.ring, index); return; }
@@ -1147,7 +1155,7 @@ export function EditorView(app, box, opts = {}) {
     });
     const out = e => { if (!ring.contains(e.target)) closeRing(); };
     setTimeout(() => document.addEventListener('pointerdown', out, true));
-    S.ring = { el: ring, off: () => document.removeEventListener('pointerdown', out, true) };
+    S.ring = { el: ring, off: () => { document.removeEventListener('pointerdown', out, true); document.removeEventListener('pointermove', moved); } };
   }
 
   const ringButtons = set => set.map((a, i) => `<button class="ring-b" data-ring="${a.kind}" data-a="${a.a}" style="--a:${a.a}deg;--i:${i}" aria-label="${a.label}"><span class="ring-ic">${a.icon('#161616', 18)}</span><em class="${Math.cos(a.a * Math.PI / 180) < -0.1 ? 'l' : 'r'}">${a.label}</em></button>`).join('');
@@ -1155,6 +1163,7 @@ export function EditorView(app, box, opts = {}) {
   // The ring folds its buttons back into the middle and fans out the other set.
   function flipRing(ring, more) {
     ring.classList.remove('open');
+    ring.classList.add('still');
     ring.querySelector('.ring-arc').setAttribute('d', '');
     setTimeout(() => {
       ring.querySelectorAll('.ring-b').forEach(b => b.remove());
@@ -1189,16 +1198,25 @@ export function EditorView(app, box, opts = {}) {
     tip.classList.add('in');
   });
   dock.addEventListener('pointerleave', () => tip.classList.remove('in'));
-  const dockButtons = set => set.map(a => `<button class="dock-b" data-add="${a.kind}" data-label="${a.label}" aria-label="${a.label}">${a.icon('#161616', 18)}</button>`).join('');
+  const dockButtons = (set, from = 0) => set.map((a, i) => `<button class="dock-b" data-add="${a.kind}" data-label="${a.label}" aria-label="${a.label}" style="--i:${from + i}">${a.icon('#161616', 18)}</button>`).join('');
   // The paw swaps the dock over to the tiles that react; the arrow swaps it back.
+  // The old set drops away and the new one pops in, so the swap reads as a new set.
   function flipDock(more, keyboard) {
     tip.classList.remove('in');
-    dock.querySelectorAll('.dock-b, .dock-div').forEach(b => b.remove());
-    tip.insertAdjacentHTML('beforebegin', more
-      ? `<button class="dock-b" data-add="back" data-label="Back" aria-label="Back">${I.back()}</button><i class="dock-div"></i>${dockButtons(MORE)}`
-      : dockButtons(ADD));
-    dock.closest('.dock').classList.toggle('more', more);
-    if (keyboard) dock.querySelector('.dock-b').focus();
+    clearTimeout(S.dockT);
+    dock.classList.remove('swap-in');
+    dock.classList.add('swap-out');
+    S.dockT = setTimeout(() => {
+      dock.querySelectorAll('.dock-b, .dock-div').forEach(b => b.remove());
+      tip.insertAdjacentHTML('beforebegin', more
+        ? `<button class="dock-b" data-add="back" data-label="Back" aria-label="Back" style="--i:0">${I.back()}</button><i class="dock-div" style="--i:0"></i>${dockButtons(MORE, 1)}`
+        : dockButtons(ADD));
+      dock.closest('.dock').classList.toggle('more', more);
+      dock.classList.remove('swap-out');
+      dock.classList.add('swap-in');
+      S.dockT = setTimeout(() => dock.classList.remove('swap-in'), 600);
+      if (keyboard) dock.querySelector('.dock-b').focus();
+    }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 120);
   }
   dock.addEventListener('click', e => {
     const b = e.target.closest('[data-add]');
@@ -1234,7 +1252,7 @@ export function EditorView(app, box, opts = {}) {
       { icon: I.mail(), title: 'Add a subscribe box', sub: 'Collect emails for your newsletter', words: 'subscribe newsletter email list react', run: () => add('subscribe') },
       { icon: I.arrow('#161616', 16), title: 'Share your box', sub: `bento.cat/${box.handle}`, words: 'share copy link tweet', run: () => openShare($('[data-ed="share"]', app)) },
       { icon: I.search(), title: 'See your visits', sub: 'Who came by, and when', words: 'visits stats views analytics', run: () => openVisits() },
-      { icon: I.section(), title: 'Page settings', sub: 'Your address, your data', words: 'settings address handle rename export delete', run: () => openSettings($('#bSettings', app)) },
+      { icon: I.section(), title: 'Page settings', sub: 'Your address, discovery, your data', words: 'settings address handle rename explore discovery visibility export delete', run: () => openSettings($('#bSettings', app)) },
     ];
     for (const it of pool) if (!ql || ql.split(/\s+/).every(w => (it.title + ' ' + it.words).toLowerCase().includes(w))) out.push(it);
     if (q) {
@@ -1437,10 +1455,10 @@ export function EditorView(app, box, opts = {}) {
     try { data = await query('stats:visits'); } catch { data = null; }
     const drawer = wrap.querySelector('.drawer');
     const times = data?.times || [];
-    const head = drawer.querySelector('.dr-head').outerHTML;
+    const head = drawer.querySelector('.dr-head').outerHTML + (data ? `<section class="sniff"><div class="sniff-top"><span class="big tnum">${(data.pageViews ?? 0).toLocaleString('en-GB')}</span><span>total page views</span></div><p class="t-meta">Counted without identifying visitors. Repeat loads and your own views count too.</p></section>` : '');
 
     if (!times.length) {
-      drawer.innerHTML = head + `<section class="dr-empty">${catLogo(64, { live: true })}<b>No visits recorded yet.</b><span>Only visitors who allow statistics are counted. Share your box in a bio, a signature or a group chat.</span><button class="btn btn-dark" data-v="share">Share your box</button></section>`;
+      drawer.innerHTML = head + `<section class="dr-empty">${catLogo(64, { live: true })}<b>No individual visits recorded yet.</b><span>Visit times and visitor profiles appear only when visitors opt in. Share your box in a bio, a signature or a group chat.</span><button class="btn btn-dark" data-v="share">Share your box</button></section>`;
       return;
     }
 
@@ -1482,7 +1500,7 @@ export function EditorView(app, box, opts = {}) {
         <div class="heat-x"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>
         <p class="t-meta">The honey square is this hour. Post new things just before the dark ones.</p>
       </section>
-      <section class="month t-meta tnum">bento.cat/${esc(box.handle)} had ${times.length.toLocaleString('en-GB')} recorded ${times.length === 1 ? 'visit' : 'visits'} in the last 30 days. Only visitors who allow statistics are counted.</section>`;
+      <section class="month t-meta tnum">bento.cat/${esc(box.handle)} had ${times.length.toLocaleString('en-GB')} individual ${times.length === 1 ? 'visit' : 'visits'} recorded in the last 30 days. Visit times and visitor profiles include only visitors who opt in.</section>`;
     Cat.flash('wide', 1800);
   }
 
@@ -1493,6 +1511,12 @@ export function EditorView(app, box, opts = {}) {
         <small class="hs-msg">&nbsp;</small></label>
       <button class="btn btn-dark sm" data-set="handle" disabled>Change address</button>
       <hr>
+      <label class="settings-toggle">
+        <span>Show in Explore</span>
+        <input type="checkbox" role="switch" data-set="explore" aria-describedby="explore-hint" ${box.showInExplore !== false ? 'checked' : ''}>
+      </label>
+      <p class="t-meta" id="explore-hint">Help people find your box in Explore. Your link stays public when this is off.</p>
+      <hr>
       <button class="menu-i" data-set="export">${I.download()}<span>Download your data</span></button>
       <div class="danger">
         <button class="menu-i danger-i" data-set="delete">${I.close('currentColor', 14)}<span>Delete your box</span></button>
@@ -1502,7 +1526,10 @@ export function EditorView(app, box, opts = {}) {
         </div>
       </div>
     </div>`, anchor, { align: 'right', cls: 'pop-settings' });
-    const inp = pop.querySelector('input'), msg = pop.querySelector('.hs-msg'), dot = pop.querySelector('.hs'), btn = pop.querySelector('[data-set="handle"]');
+    const inp = pop.querySelector('.handle-in input'), msg = pop.querySelector('.hs-msg'), dot = pop.querySelector('.hs'), btn = pop.querySelector('[data-set="handle"]');
+    pop.querySelector('[data-set="explore"]').addEventListener('change', e => {
+      commit(b => { b.showInExplore = e.target.checked; }, { animate: false });
+    });
     let ticket = 0, timer;
     const check = async () => {
       const mine = ++ticket;

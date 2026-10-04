@@ -58,6 +58,8 @@ export default defineSchema({
     footer: v.optional(v.string()),
     onboarding: v.optional(v.boolean()),
     shared: v.optional(v.boolean()),
+    // Existing boxes stay discoverable unless their owner opts out.
+    showInExplore: v.optional(v.boolean()),
     suggestions: v.optional(v.array(v.any())),
     tiles: v.array(v.any()),
     // Tile ids in phone order, once the phone layout has been arranged on its own.

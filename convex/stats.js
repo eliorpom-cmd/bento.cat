@@ -12,6 +12,7 @@ export const visits = query({
     if (!box) return null;
     const since = Date.now() - VISIT_RETENTION;
     const rows = await ctx.db.query('visits').withIndex('by_box_at', q => q.eq('boxId', box._id).gt('at', since)).order('desc').take(10000);
+    const total = await ctx.db.query('views').withIndex('by_box', q => q.eq('boxId', box._id)).unique();
 
     // People who were signed in when they came by, newest first.
     const seen = new Set(), viewers = [];
@@ -21,7 +22,7 @@ export const visits = query({
       const vb = await ctx.db.get(r.viewerBoxId);
       if (vb) viewers.push({ handle: vb.handle, name: vb.name || vb.handle, avatar: vb.avatar ?? null, avatarShape: vb.avatarShape ?? 'circle' });
     }
-    return { times: rows.map(r => r.at), viewers, signedInCount: rows.filter(r => r.viewerBoxId).length };
+    return { pageViews: total?.count ?? 0, times: rows.map(r => r.at), viewers, signedInCount: rows.filter(r => r.viewerBoxId).length };
   },
 });
 

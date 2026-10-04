@@ -61,6 +61,44 @@ describe('unfinished tiles', () => {
   });
 });
 
+describe('Explore visibility', () => {
+  const tiles = [{ id: 'note', type: 'text', text: 'Hello' }];
+
+  it('includes existing boxes by default and leaves empty boxes out', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    expect((await a.query(api.boxes.mine)).showInExplore).toBe(true);
+    expect(await t.query(api.boxes.explore)).toEqual([]);
+    await save(a, { tiles });
+    expect((await t.query(api.boxes.explore)).map(b => b.handle)).toEqual(['owner']);
+  });
+
+  it('excludes opted-out boxes from popular and recent picks while keeping direct links public', async () => {
+    const t = convexTest(schema, modules), popular = await owner(t, 'user_popular'), recent = await owner(t, 'user_recent'), visible = await owner(t, 'user_visible');
+    for (const a of [popular, recent]) await save(a, { tiles, showInExplore: false });
+    await save(visible, { tiles });
+    const box = await popular.query(api.boxes.mine);
+    await t.run(ctx => ctx.db.insert('views', { boxId: box._id, count: 100 }));
+    expect((await t.query(api.boxes.explore)).map(b => b.handle)).toEqual(['visible']);
+    for (const handle of ['popular', 'recent']) {
+      expect(await t.query(api.boxes.get, { handle })).toMatchObject({ handle, tiles });
+    }
+  });
+
+  it('persists the choice across other saves and allows the owner to opt back in', async () => {
+    const t = convexTest(schema, modules), a = await owner(t);
+    await save(a, { tiles, showInExplore: false });
+    await save(a, { bio: 'Updated from an older editor' }, 1);
+    expect((await a.query(api.boxes.mine)).showInExplore).toBe(false);
+    expect(await t.query(api.boxes.explore)).toEqual([]);
+    await expect(save(t, { showInExplore: true }, 2)).rejects.toThrow();
+    await expect(save(a, { showInExplore: 'false' }, 2)).rejects.toThrow('Choose whether to show your box in Explore.');
+    expect((await a.query(api.boxes.mine)).showInExplore).toBe(false);
+    await save(a, { showInExplore: true }, 2);
+    expect((await a.query(api.boxes.mine)).showInExplore).toBe(true);
+    expect((await t.query(api.boxes.explore)).map(b => b.handle)).toEqual(['owner']);
+  });
+});
+
 describe('media storage', () => {
   it('rejects oversized and active content before reserving storage', async () => {
     const t = convexTest(schema, modules), a = await owner(t);
