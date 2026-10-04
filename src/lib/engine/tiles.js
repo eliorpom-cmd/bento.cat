@@ -41,6 +41,9 @@ export const TINTS = {
   fur: { bg: '#161616', name: 'Fur' },
 };
 
+// Notes start on curb, purrs on white.
+export const tintOf = t => (TINTS[t.tint] ? t.tint : t.type === 'note' ? 'curb' : 'white');
+
 export const WAVE = [4, 10, 20, 14, 26, 16, 8, 18, 24, 12, 6, 16, 22, 10, 18, 8, 14, 4, 20, 12, 6, 16, 10, 4, 14, 8, 2, 6, 4, 2, 2, 2, 2];
 
 // Scribbles already on the guestbook, drawn in a 340 × 230 space.
@@ -328,11 +331,12 @@ export const Tiles = {
     const cl = ['tile', 't-' + t.type, 's-' + c.size];
     if (t.type === 'note') {
       const p = htmlText(t.html).trim();
-      cl.push('tint-' + (TINTS[t.tint] ? t.tint : 'curb'));
+      cl.push('tint-' + tintOf(t));
       if (isEmojiOnly(p)) cl.push('is-emoji');
       else if (isQuote(p)) cl.push('is-quote');
       if (['left', 'center', 'right'].includes(t.align)) cl.push('al-' + t.align);
     }
+    if (t.type === 'purr') cl.push('tint-' + tintOf(t));
     if (t.type === 'purr' && Visitor.get('purr', c.key(t))) cl.push('purred');
     if (c.mode === 'view' && ((t.url && !t.draft) || (t.type === 'map' && t.place))) cl.push('clickable');
     return cl.join(' ');

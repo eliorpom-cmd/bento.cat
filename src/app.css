@@ -256,6 +256,13 @@ cite { display: block; margin-top: 8px; font-style: normal; font-size: 13px; lin
 .purr-sub { transition: color .2s; }
 .purred .purr-sub { color: var(--paw-deep); }
 .purr-count { font-size: 28px; font-weight: 600; letter-spacing: -.035em; line-height: 32px; height: 32px; }
+/* The paw keeps its pink on every colour; these keep it and the words readable. */
+.t-purr.tint-paw .paw-btn:not(.on) { background: #fff; }
+.t-purr.tint-sage .t-sub { color: #4E5C4B; }
+.t-purr.tint-paw .t-sub { color: #8C4B58; }
+.t-purr.tint-fur .t-sub { color: #A8A8A8; }
+.t-purr.tint-fur.purred .purr-sub { color: var(--paw); }
+.t-purr.tint-fur .paw-btn.on { background: var(--paw-deep); }
 .odo { display: inline-flex; }
 .odo-d { display: inline-block; height: 32px; overflow: hidden; }
 .odo-col { display: block; transform: translateY(calc(var(--d) * -32px)); transition: transform .7s var(--pop); }
