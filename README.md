@@ -91,6 +91,29 @@ Tests use isolated Convex mocks and mocked Clerk requests. They do not upload to
 
 ## Hosting
 
+### Automatic production deployment
+
+Pushes to `main` automatically deploy to [bento.cat](https://bento.cat) on PPH
+after both CI checks pass. Pull requests and other branches run checks only.
+The Checks workflow can also be run manually on `main` to retry a deployment.
+
+GitHub's `production` environment holds `PPH_DEPLOY_KEY` and `PPH_KNOWN_HOSTS`.
+The SSH key can invoke only the server's Bento deployment helper. Convex and Clerk
+backend credentials stay on the server. The helper fetches the exact checked
+commit from this public repository, skips superseded commits, builds release
+images, verifies a database/media backup, deploys Convex, and replaces the frontend.
+Deployments are serialized, and the frontend is restored to its previous image
+if the new release fails health checks. Convex schema/function changes require
+backward compatibility with the previous frontend; database changes are not
+automatically reversed.
+
+Server setup, private logs, backups, and rollback instructions are documented in
+`~/Code/infra/services/bento.md`; the reviewed helper is in
+`~/Code/infra/deployments/bento/deploy.py`. Production configuration is embedded
+at build time from the server configuration.
+
+### Other hosting
+
 The app uses `@sveltejs/adapter-bun` and builds a Bun server in `build/`. Configure frontend variables before building; they are embedded in the build.
 
 ```sh
