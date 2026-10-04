@@ -978,9 +978,14 @@ export function EditorView(app, box, opts = {}) {
     const el = elOf(id);
     if (!el) return;
     const r = el.getBoundingClientRect();
-    // The checklist floats over the bottom-left corner. A tile under it counts as off screen.
+    // The checklist floats over the bottom-left corner. A tile under it counts as off screen,
+    // and one too tall to fit above it tucks the checklist away rather than hide behind it.
     const cl = $('#checklist', app);
-    const c = !cl.hidden && cl.getBoundingClientRect();
+    let c = !cl.hidden && cl.getBoundingClientRect();
+    if (c && r.left < c.right && r.right > c.left && r.height > c.top - 16 - 90) {
+      S.clHidden = true; syncChecklist(); c = null;
+      toast('Tucked the checklist away to make room. It’s in your menu.');
+    }
     const floor = c && r.left < c.right && r.right > c.left ? c.top - 16 : innerHeight - 100;
     if (r.top >= 90 && r.bottom <= floor) return;
     if (r.height <= floor - 90) scrollBy({ top: r.bottom > floor ? r.bottom - floor : r.top - 90, behavior: 'smooth' });
