@@ -140,7 +140,7 @@ export const isEmojiOnly = plain => {
 /* ---------- icons ---------- */
 
 export const I = {
-  link: (c = '#161616', s = 18, w = 1.4) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><path d="M7 9 L9 7 M6 5 L7.5 3.5 A2.5 2.5 0 0 1 12.5 8.5 L11 10 M10 11 L8.5 12.5 A2.5 2.5 0 0 1 3.5 7.5 L5 6" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/></svg>`,
+  link: (c = '#161616', s = 18, w = 1.4) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><path d="M6.6 9.4 L9.4 6.6 M7.2 4.4 L8.4 3.2 A2.9 2.9 0 0 1 12.8 7.6 L11.6 8.8 M8.8 11.6 L7.6 12.8 A2.9 2.9 0 0 1 3.2 8.4 L4.4 7.2" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   image: (c = '#161616', s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 18 18"><rect x="2" y="3" width="14" height="12" rx="2.5" fill="none" stroke="${c}" stroke-width="1.4"/><path d="M2.5 12.5 L6.5 8.5 L10 12 L12 10 L15.5 13.5" fill="none" stroke="${c}" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="6.5" r="1.3" fill="${c}"/></svg>`,
   text: (c = '#161616', s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 18 18"><path d="M4 4 H14 M9 4 V15" fill="none" stroke="${c}" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   pin: (c = '#161616', s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 18 18"><path d="M9 16 C9 16 14 11 14 7.5 A5 5 0 0 0 4 7.5 C4 11 9 16 9 16 Z" fill="none" stroke="${c}" stroke-width="1.4" stroke-linejoin="round"/><circle cx="9" cy="7.5" r="1.8" fill="none" stroke="${c}" stroke-width="1.4"/></svg>`,
