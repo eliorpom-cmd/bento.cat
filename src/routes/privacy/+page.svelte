@@ -22,9 +22,10 @@
 	<h3>What your browser stores</h3>
 	<ul>
 		<li><b>A temporary interaction key and reactions</b> in this tab’s memory, so purrs and sign-ups work. They disappear when the page reloads; we don’t save them in browser storage.</li>
+		<li><b>The tiles you purred</b> in local storage, written only when you tap a purr, so a reload doesn’t count the same purr twice. It lists box addresses and tile names, contains no identifier and is never sent to us. Clearing your browser’s site data removes it.</li>
 		<li><b>Sign-in cookies</b> set by Clerk, which keep you signed in.</li>
 	</ul>
-	<p>Sign-in cookies support the features you request (§ 25 (2) no. 2 TDDDG). We don’t use advertising or statistics cookies. If your browser still holds a statistics key from our earlier opt-in visit records, we use it once to delete the visits recorded under it, then remove it.</p>
+	<p>The list of purred tiles and sign-in cookies support the features you request (§ 25 (2) no. 2 TDDDG). We don’t use advertising or statistics cookies. If your browser still holds a statistics key from our earlier opt-in visit records, we use it once to delete the visits recorded under it, then remove it.</p>
 
 	<h2>When you visit someone’s box</h2>
 	<ul>
