@@ -1123,7 +1123,7 @@ export function EditorView(app, box, opts = {}) {
     closeRing(); Pop.close(); select(null);
     // Leave room for the labels that stick out to either side.
     x = innerWidth >= 520 ? clamp(x, 240, innerWidth - 250) : innerWidth / 2;
-    const ring = h(`<div class="ring" style="left:${x + scrollX}px;top:${y + scrollY}px">
+    const ring = h(`<div class="ring still" style="left:${x + scrollX}px;top:${y + scrollY}px">
       <div class="ring-band"></div>
       <svg class="ring-svg" viewBox="0 0 308 308"><circle cx="154" cy="154" r="108" fill="none" stroke="#E0E0DC" stroke-width="1.2" stroke-dasharray="3 5"/><path class="ring-arc" d="" fill="none" stroke="#161616" stroke-width="2.4" stroke-linecap="round"/></svg>
       ${ringButtons(ADD)}
@@ -1136,10 +1136,17 @@ export function EditorView(app, box, opts = {}) {
     else if (under > 0) scrollBy({ top: -under, behavior: 'smooth' });
     requestAnimationFrame(() => requestAnimationFrame(() => ring.classList.add('open')));
     const arc = ring.querySelector('.ring-arc');
-    ring.addEventListener('pointerover', e => {
+    const point = e => {
       const b = e.target.closest('.ring-b');
       arc.setAttribute('d', b ? arcPath(+b.dataset.a) : '');
-    });
+    };
+    ring.addEventListener('pointerover', e => { if (!ring.classList.contains('still')) point(e); });
+    // The buttons fly out under a cursor that hasn't moved. Only a real move lights them up.
+    const moved = e => {
+      if (!e.movementX && !e.movementY) return;
+      if (ring.classList.contains('still')) { ring.classList.remove('still'); point(e); }
+    };
+    document.addEventListener('pointermove', moved);
     ring.addEventListener('click', e => {
       const b = e.target.closest('.ring-b');
       if (b) { if (b.dataset.ring === 'more') flipRing(ring, true); else add(b.dataset.ring, index); return; }
@@ -1148,7 +1155,7 @@ export function EditorView(app, box, opts = {}) {
     });
     const out = e => { if (!ring.contains(e.target)) closeRing(); };
     setTimeout(() => document.addEventListener('pointerdown', out, true));
-    S.ring = { el: ring, off: () => document.removeEventListener('pointerdown', out, true) };
+    S.ring = { el: ring, off: () => { document.removeEventListener('pointerdown', out, true); document.removeEventListener('pointermove', moved); } };
   }
 
   const ringButtons = set => set.map((a, i) => `<button class="ring-b" data-ring="${a.kind}" data-a="${a.a}" style="--a:${a.a}deg;--i:${i}" aria-label="${a.label}"><span class="ring-ic">${a.icon('#161616', 18)}</span><em class="${Math.cos(a.a * Math.PI / 180) < -0.1 ? 'l' : 'r'}">${a.label}</em></button>`).join('');
@@ -1156,6 +1163,7 @@ export function EditorView(app, box, opts = {}) {
   // The ring folds its buttons back into the middle and fans out the other set.
   function flipRing(ring, more) {
     ring.classList.remove('open');
+    ring.classList.add('still');
     ring.querySelector('.ring-arc').setAttribute('d', '');
     setTimeout(() => {
       ring.querySelectorAll('.ring-b').forEach(b => b.remove());
