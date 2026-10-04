@@ -732,6 +732,8 @@ button.knock:hover { background: #2C2C2C; }
 /* fill your box */
 .checklist { position: fixed; left: 24px; bottom: 24px; z-index: 240; width: 340px; background: #fff; border: 1px solid var(--line); border-radius: 22px; padding: 18px; box-shadow: 0 22px 44px -26px rgba(22, 22, 22, .35); display: flex; flex-direction: column; gap: 12px; animation: clIn .45s var(--ease); }
 .checklist[hidden] { display: none; }
+/* Room to scroll the last tiles above the checklist. */
+body:has(.checklist:not([hidden])) .ed-page { padding-bottom: 380px; }
 @keyframes clIn { from { transform: translateY(20px); opacity: 0; } }
 .checklist.bye { transform: translateY(20px); opacity: 0; transition: all .4s var(--ease); }
 .cl-head { display: flex; align-items: baseline; gap: 10px; }
